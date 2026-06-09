@@ -1,0 +1,119 @@
+<template>
+  <div class="app">
+    <nav class="navbar">
+      <span class="nav-brand">Factura SiRADIG</span>
+      <div class="nav-links">
+        <router-link to="/">Dashboard</router-link>
+        <router-link to="/capture">Escanear</router-link>
+        <router-link to="/invoices">Facturas</router-link>
+        <router-link to="/export">Exportar</router-link>
+        <router-link to="/settings">Configuración</router-link>
+      </div>
+    </nav>
+    <main class="content">
+      <router-view />
+    </main>
+  </div>
+</template>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f5f7fa;
+  color: #1a1a2e;
+  min-height: 100vh;
+}
+
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.navbar {
+  background: #1976d2;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+
+.nav-brand { font-size: 1.1rem; font-weight: 700; letter-spacing: .5px; }
+
+.nav-links { display: flex; gap: 1.25rem; }
+
+.nav-links a {
+  color: rgba(255,255,255,.85);
+  text-decoration: none;
+  font-size: .9rem;
+  font-weight: 500;
+  padding: .3rem .5rem;
+  border-radius: 4px;
+  transition: background .15s;
+}
+.nav-links a:hover,
+.nav-links a.router-link-active { background: rgba(255,255,255,.2); color: white; }
+
+.content { flex: 1; padding: 1.5rem; max-width: 900px; margin: 0 auto; width: 100%; }
+
+/* Shared card style */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,.07);
+  margin-bottom: 1rem;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .55rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 600;
+  transition: opacity .15s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: #1976d2; color: white; }
+.btn-primary:hover:not(:disabled) { background: #1565c0; }
+.btn-danger  { background: #e53935; color: white; }
+.btn-danger:hover:not(:disabled) { background: #c62828; }
+.btn-outline { background: transparent; color: #1976d2; border: 2px solid #1976d2; }
+.btn-outline:hover:not(:disabled) { background: #e3f2fd; }
+
+/* Form fields */
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; color: #444; }
+.form-group input, .form-group select {
+  width: 100%;
+  padding: .6rem .8rem;
+  border: 1.5px solid #d0d7de;
+  border-radius: 8px;
+  font-size: .95rem;
+  transition: border-color .15s;
+  outline: none;
+}
+.form-group input:focus, .form-group select:focus { border-color: #1976d2; }
+
+/* Status badges */
+.badge {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border-radius: 20px;
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-pending  { background: #fff3e0; color: #e65100; }
+.badge-synced   { background: #e8f5e9; color: #2e7d32; }
+.badge-error    { background: #fce4ec; color: #b71c1c; }
+</style>
