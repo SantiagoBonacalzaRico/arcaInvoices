@@ -35,9 +35,11 @@ brew install python@3.11 node tesseract tesseract-lang
 sudo apt-get install python3.11 nodejs tesseract-ocr tesseract-ocr-spa
 ```
 
+**Windows:** ver sección [Instalación en Windows](#instalación-en-windows) más abajo.
+
 ---
 
-## Instalación rápida
+## Instalación rápida (macOS / Linux)
 
 ```bash
 git clone https://github.com/SantiagoBonacalzaRico/arcaInvoices.git
@@ -49,7 +51,7 @@ El script crea el entorno virtual de Python, instala dependencias y compila el f
 
 ---
 
-## Instalación manual paso a paso
+## Instalación manual paso a paso (macOS / Linux)
 
 ### 1. Clonar el repositorio
 
@@ -71,7 +73,7 @@ Editá `.env` con tus datos (ver sección [Configuración](#configuración)).
 ```bash
 cd backend
 python3.11 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 mkdir -p data/invoices data/certs
 ```
@@ -96,10 +98,114 @@ Abrí **http://localhost:8000** en tu navegador.
 
 ---
 
+## Instalación en Windows
+
+### 1. Instalar las dependencias
+
+**Python 3.11**
+1. Descargá el instalador desde [python.org/downloads](https://www.python.org/downloads/).
+2. Durante la instalación, tildá **"Add Python to PATH"** antes de hacer clic en Install.
+3. Verificá en una terminal:
+   ```cmd
+   python --version
+   ```
+
+**Node.js**
+1. Descargá el instalador LTS desde [nodejs.org](https://nodejs.org/).
+2. Instalá con las opciones por defecto.
+3. Verificá:
+   ```cmd
+   node --version
+   npm --version
+   ```
+
+**Git**
+1. Descargá desde [git-scm.com](https://git-scm.com/download/win) e instalá con las opciones por defecto.
+
+**Tesseract OCR**
+1. Descargá el instalador desde [github.com/UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki).
+2. Durante la instalación, en la pantalla **"Additional language data"**, expandí el árbol y seleccioná **Spanish**.
+3. Anotá el directorio de instalación (por defecto `C:\Program Files\Tesseract-OCR`).
+4. Agregá Tesseract al PATH del sistema:
+   - Buscá **"Variables de entorno"** en el menú Inicio.
+   - En **Variables del sistema**, editá `Path` y agregá `C:\Program Files\Tesseract-OCR`.
+5. Verificá en una terminal nueva:
+   ```cmd
+   tesseract --version
+   ```
+
+### 2. Clonar el repositorio
+
+Abrí **Git Bash** o **PowerShell** y ejecutá:
+
+```powershell
+git clone https://github.com/SantiagoBonacalzaRico/arcaInvoices.git
+cd arcaInvoices
+```
+
+### 3. Configurar el entorno
+
+```powershell
+copy .env.example .env
+```
+
+Abrí `.env` con el Bloc de notas o cualquier editor y completá tus datos.
+
+### 4. Backend
+
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+mkdir data\invoices
+mkdir data\certs
+```
+
+> Si PowerShell bloquea la activación del venv con un error de ejecución de scripts, ejecutá primero:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+### 5. Frontend
+
+```powershell
+cd ..\frontend
+npm install
+npm run build
+```
+
+### 6. Iniciar el servidor
+
+```powershell
+cd ..\backend
+venv\Scripts\activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Abrí **http://localhost:8000** en tu navegador.
+
+### 7. (Opcional) Ejecutar al inicio de Windows
+
+Para que el servidor arranque automáticamente con Windows, podés crear una tarea en el **Programador de tareas**:
+
+1. Buscá **Programador de tareas** en el menú Inicio.
+2. Clic en **Crear tarea básica**.
+3. Nombre: `arcaInvoices`.
+4. Desencadenador: **Al iniciar sesión**.
+5. Acción: **Iniciar un programa**.
+   - Programa: `C:\ruta\al\proyecto\arcaInvoices\backend\venv\Scripts\uvicorn.exe`
+   - Argumentos: `app.main:app --host 0.0.0.0 --port 8000`
+   - Iniciar en: `C:\ruta\al\proyecto\arcaInvoices\backend`
+
+---
+
 ## Instalación con Docker
 
+Funciona en macOS, Linux y Windows (requiere [Docker Desktop](https://www.docker.com/products/docker-desktop/)):
+
 ```bash
-cp .env.example .env
+cp .env.example .env    # Windows: copy .env.example .env
 # Editá .env con tus datos
 docker-compose up --build
 ```
