@@ -1,4 +1,7 @@
 from __future__ import annotations
+import platform
+import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
@@ -51,6 +54,70 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
     if changed_schedule:
         update_schedule(s.sync_day_of_month, s.notification_days_before)
     return s
+
+
+@router.post("/pick-folder")
+def pick_folder():
+    """
+    Open a native OS folder-picker dialog and return the selected path.
+    Works because the server runs locally on the user's machine.
+    """
+    system = platform.system()
+    selected = None
+
+    if system == "Darwin":
+        # macOS — use AppleScript (no extra dependencies)
+        result = subprocess.run(
+            ["osascript", "-e",
+             'POSIX path of (choose folder with prompt "Seleccioná la carpeta para las facturas")'],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            selected = result.stdout.strip().rstrip("/")
+
+    elif system == "Windows":
+        # Windows — use PowerShell FolderBrowserDialog
+        ps_script = (
+            "Add-Type -AssemblyName System.Windows.Forms;"
+            "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+            "$d.Description='Seleccioná la carpeta para las facturas';"
+            "if($d.ShowDialog() -eq 'OK'){$d.SelectedPath}"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            selected = result.stdout.strip()
+
+    else:
+        # Linux — try zenity first, fall back to tkinter
+        try:
+            result = subprocess.run(
+                ["zenity", "--file-selection", "--directory",
+                 "--title=Seleccioná la carpeta para las facturas"],
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                selected = result.stdout.strip()
+        except FileNotFoundError:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                root = tk.Tk()
+                root.withdraw()
+                root.wm_attributes("-topmost", True)
+                selected = filedialog.askdirectory(
+                    title="Seleccioná la carpeta para las facturas"
+                )
+                root.destroy()
+            except Exception:
+                pass
+
+    if not selected:
+        raise HTTPException(status_code=204, detail="No folder selected")
+
+    return {"path": selected}
 
 
 @router.get("/afip-setup-guide")

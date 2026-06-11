@@ -18,6 +18,9 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     # Create tables on startup
     Base.metadata.create_all(bind=engine)
+    # Apply any missing column/table migrations
+    from .migrations import run as run_migrations
+    run_migrations(engine)
     # Ensure data directories exist
     Path(settings.invoice_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.cert_dir).mkdir(parents=True, exist_ok=True)

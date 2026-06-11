@@ -7,7 +7,13 @@
       <h2>General</h2>
       <div class="form-group">
         <label>Directorio de facturas</label>
-        <input v-model="form.invoice_dir" placeholder="data/invoices" />
+        <div class="folder-row">
+          <input v-model="form.invoice_dir" placeholder="data/invoices" class="folder-input" readonly />
+          <button type="button" class="btn btn-outline folder-btn" @click="pickFolder" :disabled="pickingFolder">
+            {{ pickingFolder ? '…' : '📁 Seleccionar' }}
+          </button>
+        </div>
+        <p v-if="folderError" class="error-msg">{{ folderError }}</p>
       </div>
     </div>
 
@@ -149,6 +155,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import axios from 'axios'
 import {
   getSettings, updateSettings, getAfipSetupGuide,
   generateCsr as apiGenerateCsr, downloadCsrUrl,
@@ -165,6 +172,8 @@ const form = reactive({
 
 const guide = ref(null)
 const csrPem = ref('')
+const pickingFolder = ref(false)
+const folderError = ref('')
 const certPem = ref('')
 const saving = ref(false)
 const saveMsg = ref(null)
@@ -174,6 +183,21 @@ const verifying = ref(false)
 const wizardMsg = ref(null)
 const testingNotif = ref(false)
 const notifResult = ref(null)
+
+async function pickFolder() {
+  pickingFolder.value = true
+  folderError.value = ''
+  try {
+    const res = await updateSettings({}) // warm-up axios instance (no-op)
+    const { data } = await axios.post('/api/settings/pick-folder')
+    if (data?.path) form.invoice_dir = data.path
+  } catch (e) {
+    if (e.response?.status === 204) return // user cancelled — no error shown
+    folderError.value = 'No se pudo abrir el selector de carpetas.'
+  } finally {
+    pickingFolder.value = false
+  }
+}
 
 async function load() {
   const [s, g] = await Promise.all([getSettings(), getAfipSetupGuide()])
@@ -265,6 +289,9 @@ h3 { font-size: .95rem; font-weight: 700; margin: 1rem 0 .5rem; }
 .form-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
 .btn-sm { padding: .35rem .8rem; font-size: .82rem; }
 .mt { margin-top: .5rem; }
+.folder-row { display: flex; gap: .5rem; align-items: center; }
+.folder-input { flex: 1; background: #f9f9f9; cursor: default; }
+.folder-btn { white-space: nowrap; flex-shrink: 0; }
 .optional { font-size: .75rem; color: #888; font-weight: 400; margin-left: .3rem; }
 .ok-msg { color: #2e7d32; font-size: .85rem; margin-top: .5rem; }
 .error-msg { color: #b71c1c; font-size: .85rem; margin-top: .5rem; }
