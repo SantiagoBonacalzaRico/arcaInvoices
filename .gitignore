@@ -5,6 +5,8 @@ backend/**/__pycache__/
 backend/**/*.pyc
 backend/.pytest_cache/
 backend/data/app.db
+backend/data/app.db-shm
+backend/data/app.db-wal
 backend/data/invoices/
 backend/data/certs/
 
