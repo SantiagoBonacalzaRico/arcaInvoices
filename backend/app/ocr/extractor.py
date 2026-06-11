@@ -1,6 +1,10 @@
 from __future__ import annotations
 import io
+import os
 import re
+import subprocess
+import tempfile
+import uuid
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -9,7 +13,7 @@ import cv2
 import imagehash
 import numpy as np
 import pytesseract
-from PIL import Image
+from PIL import Image, ImageOps
 from sqlalchemy.orm import Session
 
 from ..models import OcrCorrection
@@ -19,27 +23,65 @@ from . import patterns as P
 CONFIDENCE_THRESHOLD = 0.6
 
 
+_OCR_MAX_SIDE = 2000  # pixels — large enough for text, small enough for Tesseract
+
+
+def _resize_for_ocr(img: np.ndarray) -> np.ndarray:
+    """Downsample oversized images. Tesseract crashes on very large inputs."""
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= _OCR_MAX_SIDE:
+        return img
+    scale = _OCR_MAX_SIDE / longest
+    new_w, new_h = int(w * scale), int(h * scale)
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
 def _preprocess(img: np.ndarray) -> np.ndarray:
+    """
+    Prepare image for OCR.
+    Uses CLAHE on grayscale rather than binary thresholding so that
+    real smartphone photos (variable lighting, shadows) remain legible.
+    Aggressive thresholding works well for flat scans but destroys photos.
+    """
+    img = _resize_for_ocr(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Deskew
-    coords = np.column_stack(np.where(gray < 200))
-    if len(coords) > 0:
-        angle = cv2.minAreaRect(coords)[-1]
-        if angle < -45:
-            angle = 90 + angle
-        if abs(angle) > 0.5:
-            (h, w) = gray.shape
-            M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-            gray = cv2.warpAffine(gray, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    # Adaptive threshold to improve contrast
-    denoised = cv2.fastNlMeansDenoising(gray, h=10)
-    thresh = cv2.adaptiveThreshold(denoised, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11)
-    return thresh
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(gray)
 
 
-def _compute_hash(img: np.ndarray) -> str:
-    pil = Image.fromarray(img)
-    return str(imagehash.phash(pil))
+
+_OCR_TMP_DIR = Path(__file__).parent.parent.parent / "data" / "tmp"
+
+
+def _run_ocr(pil_image: Image.Image) -> str:
+    """
+    Run Tesseract on a PIL Image using our own temp directory so the
+    tesseract subprocess can always access the file, regardless of how
+    TMPDIR is configured in the host environment.
+    """
+    _OCR_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    # Save as JPEG — Leptonica handles JPEG more reliably than PNG on macOS
+    tmp_path = _OCR_TMP_DIR / f"ocr_{uuid.uuid4().hex}.jpg"
+    try:
+        pil_image.save(str(tmp_path), format="JPEG", quality=95)
+        result = subprocess.run(
+            [
+                pytesseract.pytesseract.tesseract_cmd,
+                str(tmp_path),
+                "stdout",
+                "-l", "spa",
+                "--psm", "6",
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            err = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(f"Tesseract error (rc={result.returncode}): {err.strip()}")
+        return result.stdout.decode("utf-8", errors="replace")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _extract_cuit(text: str) -> OcrField:
@@ -136,17 +178,29 @@ def _lookup_corrections(image_hash: str, db: Session) -> dict[str, str]:
 
 
 def extract(image_bytes: bytes, db: Optional[Session] = None) -> OcrResult:
-    arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    processed = _preprocess(img)
-    image_hash = _compute_hash(processed)
+    # Open via PIL; apply EXIF rotation so phone photos are upright
+    pil_original = ImageOps.exif_transpose(
+        Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    )
+
+    # Compute perceptual hash on the original before any processing
+    image_hash = str(imagehash.phash(pil_original))
 
     # Check learning store first
     known: dict[str, str] = {}
     if db is not None:
         known = _lookup_corrections(image_hash, db)
 
-    raw_text = pytesseract.image_to_string(processed, lang="spa", config="--psm 6")
+    # Convert to OpenCV BGR for preprocessing
+    img = cv2.cvtColor(np.array(pil_original), cv2.COLOR_RGB2BGR)
+    if img is None:
+        raise ValueError("Could not decode image — unsupported format or corrupted file.")
+
+    processed = _preprocess(img)
+
+    # Run OCR via a temp file in our own data directory so the tesseract
+    # subprocess can access it regardless of TMPDIR sandboxing.
+    raw_text = _run_ocr(Image.fromarray(processed))
 
     cuit_field = OcrField(value=known.get("cuit"), confidence=1.0) if "cuit" in known else _extract_cuit(raw_text)
     date_field = OcrField(value=known.get("invoice_date"), confidence=1.0) if "invoice_date" in known else _extract_date(raw_text)
