@@ -1,9 +1,7 @@
 from __future__ import annotations
 import io
-import os
 import re
 import subprocess
-import tempfile
 import uuid
 from datetime import date
 from pathlib import Path
@@ -21,28 +19,26 @@ from ..schemas import OcrField, OcrResult
 from . import patterns as P
 
 CONFIDENCE_THRESHOLD = 0.6
+_OCR_MAX_SIDE = 2000   # max pixels on longest side before resizing
+_OCR_TMP_DIR  = Path(__file__).parent.parent.parent / "data" / "tmp"
 
 
-_OCR_MAX_SIDE = 2000  # pixels — large enough for text, small enough for Tesseract
-
+# ── Image preprocessing ───────────────────────────────────────────────────────
 
 def _resize_for_ocr(img: np.ndarray) -> np.ndarray:
-    """Downsample oversized images. Tesseract crashes on very large inputs."""
     h, w = img.shape[:2]
     longest = max(h, w)
     if longest <= _OCR_MAX_SIDE:
         return img
     scale = _OCR_MAX_SIDE / longest
-    new_w, new_h = int(w * scale), int(h * scale)
-    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
 
 def _preprocess(img: np.ndarray) -> np.ndarray:
     """
-    Prepare image for OCR.
-    Uses CLAHE on grayscale rather than binary thresholding so that
-    real smartphone photos (variable lighting, shadows) remain legible.
-    Aggressive thresholding works well for flat scans but destroys photos.
+    CLAHE on grayscale.  Works for both scanned documents and smartphone
+    photos with variable lighting.  Binary thresholding is avoided because
+    it destroys tonal range in real photos.
     """
     img = _resize_for_ocr(img)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -50,31 +46,22 @@ def _preprocess(img: np.ndarray) -> np.ndarray:
     return clahe.apply(gray)
 
 
-
-_OCR_TMP_DIR = Path(__file__).parent.parent.parent / "data" / "tmp"
-
+# ── Tesseract runner ──────────────────────────────────────────────────────────
 
 def _run_ocr(pil_image: Image.Image) -> str:
     """
-    Run Tesseract on a PIL Image using our own temp directory so the
-    tesseract subprocess can always access the file, regardless of how
-    TMPDIR is configured in the host environment.
+    Write the image to our own data/tmp dir (not system TMPDIR) so the
+    tesseract subprocess can always reach it regardless of macOS /tmp symlink
+    restrictions.  Saves as JPEG because Leptonica is more reliable with it.
     """
     _OCR_TMP_DIR.mkdir(parents=True, exist_ok=True)
-    # Save as JPEG — Leptonica handles JPEG more reliably than PNG on macOS
     tmp_path = _OCR_TMP_DIR / f"ocr_{uuid.uuid4().hex}.jpg"
     try:
         pil_image.save(str(tmp_path), format="JPEG", quality=95)
         result = subprocess.run(
-            [
-                pytesseract.pytesseract.tesseract_cmd,
-                str(tmp_path),
-                "stdout",
-                "-l", "spa",
-                "--psm", "6",
-            ],
-            capture_output=True,
-            timeout=60,
+            [pytesseract.pytesseract.tesseract_cmd, str(tmp_path),
+             "stdout", "-l", "spa", "--psm", "6"],
+            capture_output=True, timeout=60,
         )
         if result.returncode != 0:
             err = result.stderr.decode("utf-8", errors="replace")
@@ -84,135 +71,207 @@ def _run_ocr(pil_image: Image.Image) -> str:
         tmp_path.unlink(missing_ok=True)
 
 
-def _extract_cuit(text: str) -> OcrField:
-    m = P.CUIT_DASHED.search(text)
-    if m:
-        digits = re.sub(r"\D", "", m.group(0))
-        conf = 0.95 if _valid_cuit_digits(digits) else 0.45
-        return OcrField(value=m.group(0), confidence=conf)
-    m = P.CUIT_PLAIN.search(text)
-    if m:
-        raw = m.group(1)
-        if _valid_cuit_digits(raw):
-            return OcrField(value=P.normalize_cuit(raw), confidence=0.80)
-    return OcrField(value=None, confidence=0.0)
-
+# ── Field extractors ──────────────────────────────────────────────────────────
 
 def _valid_cuit_digits(digits: str) -> bool:
+    if len(digits) != 11 or not digits.isdigit():
+        return False
     weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
     total = sum(int(d) * w for d, w in zip(digits[:10], weights))
     remainder = 11 - (total % 11)
     if remainder == 11:
         remainder = 0
-    if remainder == 10:
-        return False
-    return remainder == int(digits[10])
+    return remainder != 10 and remainder == int(digits[10])
+
+
+def _extract_cuit(text: str) -> OcrField:
+    """
+    Three-pass CUIT extraction:
+      1. Labelled: 'CUIT: XX-XXXXXXXX-X'
+      2. Dashed:   anywhere in text matching XX-XXXXXXXX-X
+      3. Plain:    any 11-digit run that passes the CUIT checksum
+
+    All candidates are checksum-validated.  On tickets the CUIT often
+    appears unlabelled at the top; the checksum is the reliability gate.
+    """
+    # Pass 1 — labelled
+    m = P.CUIT_LABEL.search(text)
+    if m:
+        raw = re.sub(r"\D", "", m.group(1))
+        if len(raw) == 11 and _valid_cuit_digits(raw):
+            return OcrField(value=P.normalize_cuit(raw), confidence=0.97)
+
+    # Pass 2 — dashed anywhere
+    for m in P.CUIT_DASHED.finditer(text):
+        digits = re.sub(r"\D", "", m.group(0))
+        if _valid_cuit_digits(digits):
+            return OcrField(value=P.normalize_cuit(digits), confidence=0.92)
+
+    # Pass 3 — any valid 11-digit sequence (broad scan)
+    for m in P.CUIT_PLAIN.finditer(text):
+        raw = m.group(1)
+        if _valid_cuit_digits(raw):
+            return OcrField(value=P.normalize_cuit(raw), confidence=0.75)
+
+    return OcrField(value=None, confidence=0.0)
 
 
 def _extract_date(text: str) -> OcrField:
+    """
+    Prefer dates that appear after a 'Fecha' label; fall back to the first
+    valid date found anywhere.  Filters out implausible years.
+    """
+    def _try_parse(d: str, mo: str, yr: str) -> Optional[date]:
+        try:
+            parsed = date(int(yr), int(mo), int(d))
+            if 2000 <= parsed.year <= 2099:
+                return parsed
+        except ValueError:
+            pass
+        return None
+
+    # Prefer labelled date
+    label_m = P.DATE_LABEL.search(text)
+    if label_m:
+        after = text[label_m.end():label_m.end() + 30]
+        for pat in (P.DATE_DMY_SLASH, P.DATE_DMY_DASH, P.DATE_DMY_DOT):
+            m = pat.search(after)
+            if m:
+                parsed = _try_parse(m.group(1), m.group(2), m.group(3))
+                if parsed:
+                    return OcrField(value=str(parsed), confidence=0.95)
+
+    # Scan full text
     for pat in (P.DATE_DMY_SLASH, P.DATE_DMY_DASH, P.DATE_DMY_DOT):
-        m = pat.search(text)
-        if m:
-            d, mo, yr = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            try:
-                parsed = date(yr, mo, d)
-                return OcrField(value=str(parsed), confidence=0.90)
-            except ValueError:
-                continue
+        for m in pat.finditer(text):
+            parsed = _try_parse(m.group(1), m.group(2), m.group(3))
+            if parsed:
+                return OcrField(value=str(parsed), confidence=0.85)
+
     return OcrField(value=None, confidence=0.0)
 
 
 def _extract_invoice_number(text: str) -> OcrField:
-    # Pass 1: joined token
+    """
+    Official ARCA format (RG 1492/2003 + Oct-2018 extension):
+      Punto de venta:  4 digits (legacy) or 5 digits (current)
+      Nro comprobante: 8 digits
+      Printed as:      XXXXX-XXXXXXXX
+
+    Three passes:
+      1. Exact joined token    XXXXX-XXXXXXXX / XXXX-XXXXXXXX
+      2. Spaced pair           XXXXX  XXXXXXXX
+      3. Label-guided          any label + following digit groups
+    """
+    # Pass 1 — joined
     m = P.INVOICE_JOINED.search(text)
     if m:
-        val = f"{m.group(1)}-{m.group(2)}"
-        return OcrField(value=val, confidence=0.92)
+        pv = m.group(1).zfill(5)
+        return OcrField(value=f"{pv}-{m.group(2)}", confidence=0.93)
 
-    # Pass 2: spaced tokens on the same line
+    # Pass 2 — spaced
     m = P.INVOICE_SPACED.search(text)
     if m:
-        val = f"{m.group(1)}-{m.group(2)}"
-        return OcrField(value=val, confidence=0.80)
+        pv = m.group(1).zfill(5)
+        return OcrField(value=f"{pv}-{m.group(2)}", confidence=0.80)
 
-    # Pass 3: label-guided — find label then grab next numeric sequence(s)
+    # Pass 3 — label-guided
     label_m = P.INVOICE_LABELS.search(text)
     if label_m:
-        after = text[label_m.end():]
-        nums = re.findall(r"\d+", after[:80])
+        after = text[label_m.end():label_m.end() + 100]
+        nums = re.findall(r"\d+", after)
         if len(nums) >= 2:
-            p1, p2 = nums[0].zfill(4), nums[1].zfill(8)
-            if len(p1) <= 4 and len(p2) <= 8:
-                return OcrField(value=f"{p1}-{p2}", confidence=0.65)
-        elif len(nums) == 1 and len(nums[0]) >= 8:
+            pv  = nums[0].zfill(5)[:5]
+            num = nums[1].zfill(8)[:8]
+            return OcrField(value=f"{pv}-{num}", confidence=0.68)
+        elif nums and len(nums[0]) >= 8:
             raw = nums[0]
-            return OcrField(value=f"{raw[:4]}-{raw[4:12]}", confidence=0.55)
+            pv  = raw[:5].zfill(5)
+            num = raw[5:13].zfill(8)
+            return OcrField(value=f"{pv}-{num}", confidence=0.55)
 
     return OcrField(value=None, confidence=0.0)
 
 
 def _extract_total(text: str) -> OcrField:
-    label_m = P.TOTAL_LABEL.search(text)
-    search_area = text[label_m.end():label_m.end() + 120] if label_m else text[-300:]
+    """
+    Search for the grand total.
+
+    Strategy:
+      1. Find the LAST 'total' label (the grand total is always last on a
+         ticket/factura — subtotals come earlier).
+      2. Within the next 150 chars, find the largest amount.
+      3. If no label found, take the largest amount in the last 400 chars
+         of the document (where totals always appear on Argentine documents).
+    """
+    best_label_pos = -1
+    for m in P.TOTAL_LABEL.finditer(text):
+        best_label_pos = m.end()
+
+    if best_label_pos >= 0:
+        search_area = text[best_label_pos: best_label_pos + 150]
+        conf_boost = 0.85
+    else:
+        search_area = text[-400:]
+        conf_boost = 0.55
+
     amounts = P.AMOUNT.findall(search_area)
-    if amounts:
-        # Take the last (largest) amount — usually the grand total
-        raw = amounts[-1]
+    best_val, best_float = None, 0.0
+    for raw in amounts:
         normalized = P.normalize_amount(raw)
         try:
-            float(normalized)
-            conf = 0.85 if label_m else 0.55
-            return OcrField(value=normalized, confidence=conf)
+            v = float(normalized)
+            if v > best_float:
+                best_float, best_val = v, normalized
         except ValueError:
-            pass
+            continue
+
+    if best_val:
+        return OcrField(value=best_val, confidence=conf_boost)
     return OcrField(value=None, confidence=0.0)
 
 
+# ── Learning store ────────────────────────────────────────────────────────────
+
 def _lookup_corrections(image_hash: str, db: Session) -> dict[str, str]:
-    corrections = (
+    rows = (
         db.query(OcrCorrection)
         .filter(OcrCorrection.image_hash == image_hash)
         .all()
     )
-    return {c.field_name: c.correct_value for c in corrections}
+    return {r.field_name: r.correct_value for r in rows}
 
+
+# ── Main entry point ──────────────────────────────────────────────────────────
 
 def extract(image_bytes: bytes, db: Optional[Session] = None) -> OcrResult:
-    # Open via PIL; apply EXIF rotation so phone photos are upright
+    # Open via PIL and apply EXIF rotation (phone photos are often stored sideways)
     pil_original = ImageOps.exif_transpose(
         Image.open(io.BytesIO(image_bytes)).convert("RGB")
     )
 
-    # Compute perceptual hash on the original before any processing
     image_hash = str(imagehash.phash(pil_original))
 
-    # Check learning store first
+    # Learning store — exact image match returns stored corrections
     known: dict[str, str] = {}
     if db is not None:
         known = _lookup_corrections(image_hash, db)
 
-    # Convert to OpenCV BGR for preprocessing
     img = cv2.cvtColor(np.array(pil_original), cv2.COLOR_RGB2BGR)
-    if img is None:
-        raise ValueError("Could not decode image — unsupported format or corrupted file.")
-
     processed = _preprocess(img)
-
-    # Run OCR via a temp file in our own data directory so the tesseract
-    # subprocess can access it regardless of TMPDIR sandboxing.
     raw_text = _run_ocr(Image.fromarray(processed))
 
-    cuit_field = OcrField(value=known.get("cuit"), confidence=1.0) if "cuit" in known else _extract_cuit(raw_text)
-    date_field = OcrField(value=known.get("invoice_date"), confidence=1.0) if "invoice_date" in known else _extract_date(raw_text)
-    inv_field = OcrField(value=known.get("invoice_number"), confidence=1.0) if "invoice_number" in known else _extract_invoice_number(raw_text)
-    total_field = OcrField(value=known.get("total_amount"), confidence=1.0) if "total_amount" in known else _extract_total(raw_text)
+    cuit_field  = OcrField(value=known["cuit"],           confidence=1.0) if "cuit"           in known else _extract_cuit(raw_text)
+    date_field  = OcrField(value=known["invoice_date"],   confidence=1.0) if "invoice_date"   in known else _extract_date(raw_text)
+    inv_field   = OcrField(value=known["invoice_number"], confidence=1.0) if "invoice_number" in known else _extract_invoice_number(raw_text)
+    total_field = OcrField(value=known["total_amount"],   confidence=1.0) if "total_amount"   in known else _extract_total(raw_text)
 
     unrecognized = [
         name for name, field in [
-            ("cuit", cuit_field),
-            ("invoice_date", date_field),
+            ("cuit",           cuit_field),
+            ("invoice_date",   date_field),
             ("invoice_number", inv_field),
-            ("total_amount", total_field),
+            ("total_amount",   total_field),
         ]
         if field.confidence < CONFIDENCE_THRESHOLD
     ]
