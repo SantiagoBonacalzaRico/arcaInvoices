@@ -15,4 +15,5 @@ apscheduler==3.10.4
 aiosmtplib==3.0.2
 twilio>=9.5.0
 httpx==0.28.1
+pyzbar==0.1.9
 python-jose[cryptography]==3.3.0

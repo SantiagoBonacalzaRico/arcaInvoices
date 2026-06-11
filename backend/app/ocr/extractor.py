@@ -323,12 +323,33 @@ def extract(image_bytes: bytes, db: Optional[Session] = None) -> OcrResult:
         known = _lookup_corrections(image_hash, db)
 
     img = cv2.cvtColor(np.array(pil_original), cv2.COLOR_RGB2BGR)
+
+    # ── Barcode / QR scan (runs first, fully local, no network) ──────────────
+    from .barcode import scan as barcode_scan
+    bc = barcode_scan(img)
+
     raw_text = _run_ocr(img)
 
-    cuit_field  = OcrField(value=known["cuit"],           confidence=1.0) if "cuit"           in known else _extract_cuit(raw_text)
-    date_field  = OcrField(value=known["invoice_date"],   confidence=1.0) if "invoice_date"   in known else _extract_date(raw_text)
-    inv_field   = OcrField(value=known["invoice_number"], confidence=1.0) if "invoice_number" in known else _extract_invoice_number(raw_text)
-    total_field = OcrField(value=known["total_amount"],   confidence=1.0) if "total_amount"   in known else _extract_total(raw_text)
+    # ── Field extraction: learning store > barcode > OCR ─────────────────────
+    def _field(name: str, ocr_fn, bc_value: Optional[str],
+               bc_conf: float) -> OcrField:
+        if name in known:
+            return OcrField(value=known[name], confidence=1.0)
+        if bc_value:
+            return OcrField(value=bc_value, confidence=bc_conf)
+        return ocr_fn(raw_text)
+
+    bc_date  = bc.invoice_date   if bc else None
+    bc_inv   = bc.invoice_number if bc else None
+    bc_cuit  = bc.cuit           if bc else None
+    bc_total = bc.total_amount   if bc else None
+    # ARCA QR gives all fields at 1.0; CODE128 gives date+number at 0.92
+    bc_conf  = 1.0 if (bc and bc.source == "arca_qr") else 0.92
+
+    cuit_field  = _field("cuit",           _extract_cuit,            bc_cuit,  bc_conf)
+    date_field  = _field("invoice_date",   _extract_date,            bc_date,  bc_conf)
+    inv_field   = _field("invoice_number", _extract_invoice_number,  bc_inv,   bc_conf)
+    total_field = _field("total_amount",   _extract_total,           bc_total, bc_conf)
 
     unrecognized = [
         name for name, field in [
@@ -348,4 +369,5 @@ def extract(image_bytes: bytes, db: Optional[Session] = None) -> OcrResult:
         raw_text=raw_text,
         image_hash=image_hash,
         unrecognized_fields=unrecognized,
+        barcode_source=bc.source if bc else None,
     )

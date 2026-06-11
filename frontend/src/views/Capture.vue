@@ -22,6 +22,24 @@
 
     <!-- Step 3: Confirm / correct fields -->
     <div class="card" v-if="step === 'confirm'">
+
+      <!-- Barcode source badge -->
+      <div v-if="ocrResult?.barcode_source" class="source-badge">
+        <span v-if="ocrResult.barcode_source === 'arca_qr'">
+          ✅ Datos extraídos del <strong>QR de ARCA</strong> — máxima confiabilidad.
+        </span>
+        <span v-else>
+          📊 Fecha y Nro. comprobante extraídos del <strong>código de barras</strong> del ticket.
+        </span>
+      </div>
+
+      <!-- QR disclaimer when fields are still unrecognized -->
+      <div v-if="ocrResult?.unrecognized_fields?.length && !ocrResult?.barcode_source" class="qr-hint">
+        ℹ️ Algunos campos no se pudieron leer del texto. Si el comprobante tiene un
+        <strong>código QR de ARCA</strong>, escanealo con la cámara para obtener todos
+        los datos automáticamente.
+      </div>
+
       <div class="preview-row">
         <img :src="previewUrl" class="preview-thumb" />
         <div class="ocr-fields">
@@ -213,6 +231,14 @@ function reset() {
 .unrecognized-tag { background: #fff3e0; color: #e65100; font-size: .72rem; font-weight: 700; padding: .1rem .4rem; border-radius: 4px; margin-left: .4rem; }
 .confidence-tag { color: #aaa; font-size: .75rem; margin-left: .3rem; }
 .field-warn { border-color: #ff9800 !important; }
+.source-badge {
+  background: #e8f5e9; color: #2e7d32; border: 1.5px solid #a5d6a7;
+  border-radius: 8px; padding: .65rem 1rem; margin-bottom: 1rem; font-size: .88rem;
+}
+.qr-hint {
+  background: #fff8e1; color: #e65100; border: 1.5px solid #ffe082;
+  border-radius: 8px; padding: .65rem 1rem; margin-bottom: 1rem; font-size: .85rem;
+}
 .form-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1rem; flex-wrap: wrap; }
 .error-msg { color: #b71c1c; font-size: .85rem; margin-top: .5rem; }
 .center { text-align: center; }

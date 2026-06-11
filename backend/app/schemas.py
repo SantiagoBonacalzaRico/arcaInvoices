@@ -52,6 +52,7 @@ class OcrResult(BaseModel):
     raw_text: str
     image_hash: str
     unrecognized_fields: list[str]
+    barcode_source: Optional[str] = None  # "arca_qr" | "code128" | None
 
 
 class OcrCorrection(BaseModel):
