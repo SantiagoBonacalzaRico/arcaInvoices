@@ -65,19 +65,33 @@ def _tesseract(gray: np.ndarray, psm: str) -> str:
 
 def _run_ocr(img: np.ndarray) -> str:
     """
-    Two-pass OCR for maximum field coverage:
-      Pass 1 — PSM 4 (single-column variable-size text) on the full image:
-               best for body text, product lines, TOTAL label.
-      Pass 2 — PSM 6 (uniform block) on the bottom 25% of the image:
-               better for the dense receipt footer where CUIT, CAE,
-               and comprobante number are printed in small uniform text.
-    Both results are concatenated; field extractors scan the combined text.
+    Three-pass OCR:
+      Pass 1 — PSM 4 on full image: body text, TOTAL, product lines.
+      Pass 2 — PSM 6 on bottom 25%: dense footer (CAE, comprobante ref).
+      Pass 3 — PSM 6 on top 20% upscaled 2×: header with CUIT, NRO.COMP,
+               transaction date+time (small text — needs upscaling).
+    All results concatenated; field extractors scan the combined text.
     """
     gray = _to_gray(img)
+    h = gray.shape[0]
+
     full_text   = _tesseract(gray, "4")
-    footer_gray = gray[int(gray.shape[0] * 0.75):, :]
+    footer_gray = gray[int(h * 0.75):, :]
     footer_text = _tesseract(footer_gray, "6")
-    return full_text + "\n" + footer_text
+
+    # Header: upscale 2× with Lanczos to make small header text readable
+    header_region = img[:int(img.shape[0] * 0.20), :]
+    header_up = cv2.resize(
+        header_region,
+        (header_region.shape[1] * 2, header_region.shape[0] * 2),
+        interpolation=cv2.INTER_LANCZOS4,
+    )
+    header_gray = cv2.cvtColor(header_up, cv2.COLOR_BGR2GRAY)
+    header_text = _tesseract(header_gray, "6")
+
+    # Header first: field extractors scan from the top; total search
+    # uses the last N chars so footer must remain at the end.
+    return header_text + "\n" + full_text + "\n" + footer_text
 
 
 # ── Field extractors ──────────────────────────────────────────────────────────
@@ -127,8 +141,10 @@ def _extract_cuit(text: str) -> OcrField:
 
 def _extract_date(text: str) -> OcrField:
     """
-    Prefer dates that appear after a 'Fecha' label; fall back to the first
-    valid date found anywhere.  Filters out implausible years.
+    Date extraction priority:
+      1. Date+time pattern DD/MM/YYYY HH:MM[:SS] — transaction timestamp on tickets
+      2. Date after a 'Fecha' label
+      3. Any date NOT preceded by a Vto./vencimiento context (CAE expiry)
     """
     def _try_parse(d: str, mo: str, yr: str) -> Optional[date]:
         try:
@@ -139,7 +155,20 @@ def _extract_date(text: str) -> OcrField:
             pass
         return None
 
-    # Prefer labelled date
+    def _is_vto(text: str, match_start: int) -> bool:
+        """Return True if the date follows a Vto./vencimiento label within 20 chars."""
+        preceding = text[max(0, match_start - 20):match_start]
+        return bool(P.DATE_VTO_CONTEXT.search(preceding))
+
+    # Pass 1 — date WITH time component (strongest signal: this is the transaction date)
+    for m in P.DATE_WITH_TIME.finditer(text):
+        if _is_vto(text, m.start()):
+            continue
+        parsed = _try_parse(m.group(1), m.group(2), m.group(3))
+        if parsed:
+            return OcrField(value=str(parsed), confidence=0.97)
+
+    # Pass 2 — labelled date
     label_m = P.DATE_LABEL.search(text)
     if label_m:
         after = text[label_m.end():label_m.end() + 30]
@@ -150,9 +179,11 @@ def _extract_date(text: str) -> OcrField:
                 if parsed:
                     return OcrField(value=str(parsed), confidence=0.95)
 
-    # Scan full text
+    # Pass 3 — any date, skipping Vto. contexts
     for pat in (P.DATE_DMY_SLASH, P.DATE_DMY_DASH, P.DATE_DMY_DOT):
         for m in pat.finditer(text):
+            if _is_vto(text, m.start()):
+                continue
             parsed = _try_parse(m.group(1), m.group(2), m.group(3))
             if parsed:
                 return OcrField(value=str(parsed), confidence=0.85)

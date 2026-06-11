@@ -6,9 +6,9 @@ import re
 CUIT_DASHED = re.compile(r"\b(\d{2})[.\-–](\d{8})[.\-–](\d)\b")
 # Plain 11 digits (no separators) — validated by checksum in extractor
 CUIT_PLAIN = re.compile(r"\b(\d{11})\b")
-# Labelled form: "CUIT:", "C.U.I.T.:", "Cuit Emisor:" etc.
+# Labelled form: "CUIT:", "C.U.I.T.:", "Cuit Emisor:", "CUIT: 30-70870563-9"
 CUIT_LABEL = re.compile(
-    r"C\.?U\.?I\.?T\.?\s*(?:Emisor|N[°º]|:)?\s*[:\s]*"
+    r"C\.?U\.?I\.?T\.?\s*(?:Emisor|Nro\.?|N[°º]\.?)?\s*:?\s*"
     r"(\d{2}[\.\-–]?\d{8}[\.\-–]?\d|\d{11})",
     re.IGNORECASE,
 )
@@ -18,6 +18,11 @@ CUIT_LABEL = re.compile(
 DATE_DMY_SLASH = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
 DATE_DMY_DASH  = re.compile(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b")
 DATE_DMY_DOT   = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
+# Date+time: DD/MM/YYYY HH:MM or DD/MM/YYYY HH:MM:SS (transaction date on tickets)
+DATE_WITH_TIME = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\s+\d{1,2}:\d{2}")
+# Contexts that indicate a CAE expiry — NOT the transaction date
+# V/Y confusion is common in OCR (Vto. → Yto.)
+DATE_VTO_CONTEXT = re.compile(r"[VvYy]to\.?|[Vv]enc(?:imiento)?\.?", re.IGNORECASE)
 # Date labels that appear before the date value
 DATE_LABEL = re.compile(
     r"(?:Fecha\s*(?:de\s*(?:Emisi[oó]n|Comprobante))?|Date)\s*[:\s]+",
@@ -34,13 +39,14 @@ INVOICE_SPACED = re.compile(r"\b(\d{4,5})\s{1,3}(\d{8})\b")
 
 # Labels that precede the comprobante number on facturas and tickets
 INVOICE_LABELS = re.compile(
-    r"(?:comprobante\s*(?:nro|n[uú]mero|n[°º])?|"
+    r"(?:nro\.?\s*comp(?:robante)?|"   # NRO.COMP: or NRO.COMPROBANTE: — most specific first
+    r"n[°º]\.?\s*comp(?:robante)?|"
+    r"comprobante\s*(?:nro|n[uú]mero|n[°º])?|"
     r"n[uú]mero\s*(?:de\s*)?comprobante|"
     r"factura\s*(?:nro|n[°º])?|"
     r"tique\s*(?:nro|n[°º])?|"
     r"ticket\s*(?:nro|n[°º])?|"
     r"recibo\s*(?:nro|n[°º])?|"
-    r"nro\.?\s*comp(?:robante)?|"
     r"n[°º]\.?\s*(?:comp)?)",
     re.IGNORECASE,
 )
