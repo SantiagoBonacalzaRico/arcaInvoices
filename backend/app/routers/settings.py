@@ -4,11 +4,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import AppSettings
+from ..models import AppSettings, User
+from ..auth.security import get_current_user
 from ..schemas import CertUpload, CsrGenerated, SettingsOut, SettingsUpdate
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -24,10 +25,10 @@ AFIP_SETUP_STEPS = [
 ]
 
 
-def _get_or_create_settings(db: Session) -> AppSettings:
-    s = db.query(AppSettings).filter(AppSettings.id == 1).first()
+def _get_or_create_settings(db: Session, user_id: int) -> AppSettings:
+    s = db.query(AppSettings).filter(AppSettings.user_id == user_id).first()
     if not s:
-        s = AppSettings(id=1)
+        s = AppSettings(user_id=user_id)
         db.add(s)
         db.commit()
         db.refresh(s)
@@ -35,15 +36,19 @@ def _get_or_create_settings(db: Session) -> AppSettings:
 
 
 @router.get("", response_model=SettingsOut)
-def get_settings(db: Session = Depends(get_db)):
-    return _get_or_create_settings(db)
+def get_settings(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _get_or_create_settings(db, user.id)
 
 
 @router.put("", response_model=SettingsOut)
-def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
+def update_settings(
+    payload: SettingsUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     from ..scheduler import update_schedule
 
-    s = _get_or_create_settings(db)
+    s = _get_or_create_settings(db, user.id)
     changed_schedule = False
     for field, value in payload.model_dump(exclude_none=True).items():
         if field in ("sync_day_of_month", "notification_days_before"):
@@ -52,12 +57,12 @@ def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(s)
     if changed_schedule:
-        update_schedule(s.sync_day_of_month, s.notification_days_before)
+        update_schedule()
     return s
 
 
 @router.post("/pick-folder")
-def pick_folder():
+def pick_folder(user: User = Depends(get_current_user)):
     """
     Open a native OS folder-picker dialog and return the selected path.
     Works because the server runs locally on the user's machine.
@@ -121,8 +126,8 @@ def pick_folder():
 
 
 @router.get("/afip-setup-guide")
-def afip_setup_guide(db: Session = Depends(get_db)):
-    s = _get_or_create_settings(db)
+def afip_setup_guide(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    s = _get_or_create_settings(db, user.id)
     return {
         "current_step": s.afip_setup_step,
         "total_steps": len(AFIP_SETUP_STEPS),
@@ -139,15 +144,23 @@ def afip_setup_guide(db: Session = Depends(get_db)):
 
 
 @router.post("/afip/generate-csr", response_model=CsrGenerated)
-def generate_csr(db: Session = Depends(get_db)):
-    """Step 3: Generate RSA key pair + CSR for the configured CUIT."""
+def generate_csr(
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Step 3: Generate (or reuse) the RSA key pair + CSR for the configured CUIT.
+    Reuses an existing private key so an already-registered certificate keeps
+    matching; pass force=true to generate a brand-new key pair.
+    """
     from ..afip.wsaa import generate_key_and_csr
     from ..config import settings as cfg
 
-    s = _get_or_create_settings(db)
+    s = _get_or_create_settings(db, user.id)
     if not s.afip_cuit:
         raise HTTPException(status_code=400, detail="Set AFIP CUIT before generating a certificate.")
-    key_file, csr_file = generate_key_and_csr(s.afip_cuit, str(cfg.cert_dir))
+    key_file, csr_file = generate_key_and_csr(s.afip_cuit, str(cfg.cert_dir), force=force)
     s.afip_key_path = str(key_file)
     s.afip_setup_step = max(s.afip_setup_step, 3)
     db.commit()
@@ -161,7 +174,7 @@ def generate_csr(db: Session = Depends(get_db)):
 
 
 @router.get("/afip/download-csr")
-def download_csr(db: Session = Depends(get_db)):
+def download_csr(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     from fastapi.responses import FileResponse
     from ..config import settings as cfg
 
@@ -176,7 +189,11 @@ def download_csr(db: Session = Depends(get_db)):
 
 
 @router.post("/afip/upload-cert", response_model=SettingsOut)
-async def upload_certificate(payload: CertUpload, db: Session = Depends(get_db)):
+async def upload_certificate(
+    payload: CertUpload,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Step 6: Upload the signed certificate (.crt) from AFIP."""
     from ..afip.wsaa import save_certificate
     from ..config import settings as cfg
@@ -186,7 +203,7 @@ async def upload_certificate(payload: CertUpload, db: Session = Depends(get_db))
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid certificate: {exc}")
 
-    s = _get_or_create_settings(db)
+    s = _get_or_create_settings(db, user.id)
     s.afip_cert_path = str(cert_path)
     s.afip_setup_step = max(s.afip_setup_step, 6)
     db.commit()
@@ -195,11 +212,11 @@ async def upload_certificate(payload: CertUpload, db: Session = Depends(get_db))
 
 
 @router.post("/afip/verify-connection")
-def verify_afip_connection(db: Session = Depends(get_db)):
+def verify_afip_connection(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Step 7: Test WSAA authentication with the configured certificate."""
     from ..afip.siradig import SiRADIGClient, ConfigurationError
 
-    s = _get_or_create_settings(db)
+    s = _get_or_create_settings(db, user.id)
     try:
         client = SiRADIGClient(s)
         ok = client.test_connection()
@@ -214,10 +231,10 @@ def verify_afip_connection(db: Session = Depends(get_db)):
 
 
 @router.post("/test-notification")
-async def test_notification(db: Session = Depends(get_db)):
+async def test_notification(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     from ..notifications import notify
 
-    s = _get_or_create_settings(db)
+    s = _get_or_create_settings(db, user.id)
     results = await notify(
         s,
         subject="Test — Factura SiRADIG",

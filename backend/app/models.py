@@ -2,15 +2,54 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, DateTime, Date, ForeignKey,
-    Index, Integer, Numeric, String, Text,
+    Index, Integer, Numeric, String, Text, UniqueConstraint,
 )
 from .database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(256), nullable=False, unique=True, index=True)
+    username = Column(String(80), nullable=False, unique=True, index=True)
+    # Null for Google-only accounts (no local password set)
+    password_hash = Column(String(256))
+    # Google "sub" claim — stable per-account id; null for password-only accounts
+    google_sub = Column(String(64), unique=True, index=True)
+    is_verified = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+
+    code = Column(String(64), primary_key=True)
+    # Optional binding: if set, only this email may redeem the code
+    email = Column(String(256))
+    created_by = Column(Integer, ForeignKey("users.id"))
+    used_by = Column(Integer, ForeignKey("users.id"))
+    expires_at = Column(DateTime)
+    used_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+
+    token = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Invoice(Base):
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     cuit = Column(String(13), nullable=False)
     invoice_date = Column(Date, nullable=False)
     invoice_number = Column(String(14), nullable=False)  # "0001-00012345"
@@ -27,6 +66,7 @@ class Invoice(Base):
         Index("idx_invoices_cuit", "cuit"),
         Index("idx_invoices_category", "category"),
         Index("idx_invoices_status_date", "sync_status", "invoice_date"),
+        Index("idx_invoices_user", "user_id"),
     )
 
 
@@ -34,6 +74,7 @@ class OcrCorrection(Base):
     __tablename__ = "ocr_corrections"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     field_name = Column(String(32), nullable=False)
     raw_snippet = Column(Text)
@@ -46,6 +87,7 @@ class SyncLog(Base):
     __tablename__ = "sync_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime)
     status = Column(String(16))  # success | partial | failed
@@ -54,20 +96,27 @@ class SyncLog(Base):
 
 
 class CuitRegistry(Base):
-    """Cache of CUIT → razón social lookups."""
+    """Per-user cache of CUIT → razón social lookups."""
     __tablename__ = "cuit_registry"
 
-    cuit = Column(String(13), primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    cuit = Column(String(13), nullable=False)
     razon_social = Column(String(256), nullable=False)
     source = Column(String(16), default="manual")  # manual | cuitalizer | padron
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint("user_id", "cuit", name="uq_cuit_registry_user_cuit"),
+    )
+
 
 class AppSettings(Base):
-    """Single-row config table (id always = 1)."""
+    """Per-user config row (one per user)."""
     __tablename__ = "app_settings"
 
     id = Column(Integer, primary_key=True, default=1)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)
     invoice_dir = Column(String(512), nullable=False, default="data/invoices")
     sync_day_of_month = Column(Integer, nullable=False, default=20)
     notification_days_before = Column(Integer, nullable=False, default=5)

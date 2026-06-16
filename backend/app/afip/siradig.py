@@ -135,13 +135,13 @@ class SiRADIGClient:
         return bool(ts.token and ts.sign)
 
 
-def run_sync(db: Session) -> SyncLog:
+def run_sync(db: Session, user_id: int) -> SyncLog:
     from datetime import datetime
 
     from ..models import Invoice as Inv, SyncLog as SL
 
-    db_settings = db.query(AppSettings).filter(AppSettings.id == 1).first()
-    log = SL(started_at=datetime.utcnow(), invoices_synced=0, status="running")
+    db_settings = db.query(AppSettings).filter(AppSettings.user_id == user_id).first()
+    log = SL(started_at=datetime.utcnow(), invoices_synced=0, status="running", user_id=user_id)
     db.add(log)
     db.commit()
 
@@ -149,7 +149,7 @@ def run_sync(db: Session) -> SyncLog:
         client = SiRADIGClient(db_settings)
         pending = (
             db.query(Inv)
-            .filter(Inv.sync_status == "pending")
+            .filter(Inv.user_id == user_id, Inv.sync_status == "pending")
             .order_by(Inv.invoice_date)
             .all()
         )

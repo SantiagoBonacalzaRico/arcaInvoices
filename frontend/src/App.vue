@@ -1,6 +1,21 @@
+<script setup>
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from './stores/auth'
+
+const auth = useAuthStore()
+const router = useRouter()
+const showNav = computed(() => auth.isAuthenticated)
+
+async function onLogout() {
+  await auth.logout()
+  router.push({ name: 'login' })
+}
+</script>
+
 <template>
   <div class="app">
-    <nav class="navbar">
+    <nav v-if="showNav" class="navbar">
       <span class="nav-brand">Factura SiRADIG</span>
       <div class="nav-links">
         <router-link to="/">Dashboard</router-link>
@@ -8,6 +23,10 @@
         <router-link to="/invoices">Facturas</router-link>
         <router-link to="/export">Exportar</router-link>
         <router-link to="/settings">Configuración</router-link>
+      </div>
+      <div class="nav-user">
+        <span class="nav-username">{{ auth.user?.username }}</span>
+        <button class="nav-logout" @click="onLogout">Salir</button>
       </div>
     </nav>
     <main class="content">
@@ -56,6 +75,20 @@ body {
 }
 .nav-links a:hover,
 .nav-links a.router-link-active { background: rgba(255,255,255,.2); color: white; }
+
+.nav-user { display: flex; align-items: center; gap: .75rem; }
+.nav-username { font-size: .85rem; color: rgba(255,255,255,.9); font-weight: 600; }
+.nav-logout {
+  background: rgba(255,255,255,.15);
+  color: white;
+  border: none;
+  padding: .3rem .7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: .8rem;
+  font-weight: 600;
+}
+.nav-logout:hover { background: rgba(255,255,255,.3); }
 
 .content { flex: 1; padding: 1.5rem; max-width: 900px; margin: 0 auto; width: 100%; }
 

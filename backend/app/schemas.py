@@ -2,7 +2,44 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+class RegisterRequest(BaseModel):
+    invite_code: str = Field(..., min_length=1)
+    email: EmailStr
+    username: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class LoginRequest(BaseModel):
+    # email or username
+    identifier: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    username: str
+    is_admin: bool
+    is_verified: bool
+
+    model_config = {"from_attributes": True}
+
+
+class InviteCreateRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    expires_days: int = Field(7, ge=1, le=365)
+
+
+class InviteOut(BaseModel):
+    code: str
+    email: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    url: str
 
 
 # ── Invoice ──────────────────────────────────────────────────────────────────
@@ -10,7 +47,7 @@ from pydantic import BaseModel, Field
 class InvoiceBase(BaseModel):
     cuit: str = Field(..., pattern=r"^\d{2}-\d{8}-\d$")
     invoice_date: date
-    invoice_number: str = Field(..., pattern=r"^\d{4}-\d{8}$")
+    invoice_number: str = Field(..., pattern=r"^\d{4,5}-\d{8}$")
     total_amount: Decimal = Field(..., gt=0)
     category: Optional[str] = None
     image_path: Optional[str] = None
@@ -23,7 +60,7 @@ class InvoiceCreate(InvoiceBase):
 class InvoiceUpdate(BaseModel):
     cuit: Optional[str] = Field(None, pattern=r"^\d{2}-\d{8}-\d$")
     invoice_date: Optional[date] = None
-    invoice_number: Optional[str] = Field(None, pattern=r"^\d{4}-\d{8}$")
+    invoice_number: Optional[str] = Field(None, pattern=r"^\d{4,5}-\d{8}$")
     total_amount: Optional[Decimal] = Field(None, gt=0)
     category: Optional[str] = None
 
@@ -33,8 +70,13 @@ class InvoiceOut(InvoiceBase):
     sync_status: str
     synced_at: Optional[datetime] = None
     created_at: datetime
+    razon_social: Optional[str] = None  # emisor name, from cuit_registry cache
 
     model_config = {"from_attributes": True}
+
+
+class SyncStatusUpdate(BaseModel):
+    sync_status: Literal["synced", "pending"]
 
 
 # ── OCR ───────────────────────────────────────────────────────────────────────
@@ -52,7 +94,8 @@ class OcrResult(BaseModel):
     raw_text: str
     image_hash: str
     unrecognized_fields: list[str]
-    barcode_source: Optional[str] = None  # "arca_qr" | "code128" | None
+    barcode_source: Optional[str] = None  # "arca_qr" | "code128" | "other_qr" | None
+    qr_url: Optional[str] = None           # non-ARCA QR URL found in image (redirect offer)
 
 
 class OcrCorrection(BaseModel):

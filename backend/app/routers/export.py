@@ -18,7 +18,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Invoice
+from ..models import Invoice, User
+from ..auth.security import get_current_user
 
 router = APIRouter(tags=["export"])
 
@@ -48,25 +49,58 @@ def _fmt_amount(amount) -> str:
     return f"{Decimal(str(amount)):.2f}"
 
 
-def _get_razon_social(cuit: str, db: Session) -> str:
+def _get_razon_social(cuit: str, db: Session, user_id: int) -> str:
     from ..afip.padron import lookup
-    return lookup(cuit, db)
+    return lookup(cuit, db, user_id)
 
 
 # ── CUIT registry ──────────────────────────────────────────────────────────────
 
+@router.get("/api/cuits")
+def list_cuits(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """All known CUIT → razón social pairs (for the capture-page combo box)."""
+    from ..models import CuitRegistry
+    rows = (
+        db.query(CuitRegistry)
+        .filter(CuitRegistry.user_id == user.id)
+        .order_by(CuitRegistry.razon_social)
+        .all()
+    )
+    return [{"cuit": r.cuit, "razon_social": r.razon_social} for r in rows]
+
+
 @router.get("/api/cuit/{cuit}")
-def get_razon_social(cuit: str, db: Session = Depends(get_db)):
+def get_razon_social(
+    cuit: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
     """Look up razón social for a CUIT (cache → Cuitalizer → padron)."""
-    razon = _get_razon_social(cuit, db)
+    razon = _get_razon_social(cuit, db, user.id)
     return {"cuit": cuit, "razon_social": razon, "found": bool(razon)}
 
 
+@router.get("/api/cuit/{cuit}/diagnose")
+def diagnose_razon_social(
+    cuit: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """
+    Test the razón social lookup for a CUIT and surface the real error on
+    failure (missing cert, ws_sr_padron_a13 not authorized, WSAA error, …).
+    Use this to verify the ARCA/AFIP padron setup.
+    """
+    from ..afip.padron import diagnose
+    return diagnose(cuit, db, user.id)
+
+
 @router.post("/api/cuit/{cuit}")
-def set_razon_social(cuit: str, razon_social: str, db: Session = Depends(get_db)):
+def set_razon_social(
+    cuit: str,
+    razon_social: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Manually set or override the razón social for a CUIT."""
     from ..afip.padron import set_manual
-    set_manual(cuit, razon_social, db)
+    set_manual(cuit, razon_social, db, user.id)
     return {"cuit": cuit, "razon_social": razon_social}
 
 
@@ -77,6 +111,7 @@ def export_summary(
     fiscal_year: Optional[int] = Query(None, description="Filter by year, e.g. 2025"),
     sync_status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Returns invoices aggregated by CUIT + razón social, with each
@@ -101,7 +136,7 @@ def export_summary(
       ...
     ]
     """
-    q = db.query(Invoice)
+    q = db.query(Invoice).filter(Invoice.user_id == user.id)
     if fiscal_year:
         q = q.filter(Invoice.invoice_date >= f"{fiscal_year}-01-01",
                      Invoice.invoice_date <= f"{fiscal_year}-12-31")
@@ -116,7 +151,7 @@ def export_summary(
         if inv.cuit not in groups:
             groups[inv.cuit] = {
                 "cuit": inv.cuit,
-                "razon_social": _get_razon_social(inv.cuit, db),
+                "razon_social": _get_razon_social(inv.cuit, db, user.id),
                 "total": Decimal("0"),
                 "invoices": [],
             }
@@ -147,6 +182,7 @@ def export_csv(
     fiscal_year: Optional[int] = Query(None),
     sync_status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Download a CSV file with one row per invoice, columns:
@@ -155,7 +191,7 @@ def export_csv(
     Compatible with Excel and Google Sheets (semicolon separator,
     UTF-8 BOM so Excel opens it correctly without import wizard).
     """
-    q = db.query(Invoice)
+    q = db.query(Invoice).filter(Invoice.user_id == user.id)
     if fiscal_year:
         q = q.filter(Invoice.invoice_date >= f"{fiscal_year}-01-01",
                      Invoice.invoice_date <= f"{fiscal_year}-12-31")
@@ -173,7 +209,7 @@ def export_csv(
         "Fecha", "Importe", "Categoría", "Estado",
     ])
     for inv in invoices:
-        razon = _get_razon_social(inv.cuit, db)
+        razon = _get_razon_social(inv.cuit, db, user.id)
         writer.writerow([
             inv.cuit,
             razon,

@@ -9,6 +9,15 @@ backend/data/app.db-shm
 backend/data/app.db-wal
 backend/data/invoices/
 backend/data/certs/
+# Local DB backups / throwaway copies (never commit personal data)
+backend/data/*.backup-*
+backend/data/*.fullbackup-*
+backend/data/*.premigrate-*
+backend/data/app.smoke.db*
+backend/data/app.test-migration.db*
+
+# Personal AFIP certificates (per-user credentials — must never be committed)
+certs/
 
 # Environment
 .env

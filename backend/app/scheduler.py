@@ -1,8 +1,7 @@
 from __future__ import annotations
-import asyncio
 import logging
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -30,32 +29,40 @@ def _next_sync_date(sync_day: int) -> date:
     return candidate
 
 
-async def _run_sync_job() -> None:
+def _effective_day(target_day: int, today: date) -> int:
+    """Clamp a configured day-of-month to the current month's length."""
+    return min(target_day, monthrange(today.year, today.month)[1])
+
+
+async def _run_user_sync(user_id: int) -> None:
     from .database import SessionLocal
     from .afip.siradig import run_sync
 
-    logger.info("Monthly SiRADIG sync triggered by scheduler")
     db = SessionLocal()
     try:
-        log = run_sync(db)
-        logger.info("Sync completed: status=%s synced=%d", log.status, log.invoices_synced)
+        log = run_sync(db, user_id)
+        logger.info("Sync (user %s): status=%s synced=%d", user_id, log.status, log.invoices_synced)
     except Exception as exc:
-        logger.error("Sync job error: %s", exc)
+        logger.error("Sync job error (user %s): %s", user_id, exc)
     finally:
         db.close()
 
 
-async def _check_and_notify_job() -> None:
+async def _notify_user(user_id: int) -> None:
     from .database import SessionLocal
     from .models import AppSettings, Invoice
     from .notifications import notify
 
     db = SessionLocal()
     try:
-        s = db.query(AppSettings).filter(AppSettings.id == 1).first()
+        s = db.query(AppSettings).filter(AppSettings.user_id == user_id).first()
         if not s:
             return
-        pending = db.query(Invoice).filter(Invoice.sync_status == "pending").count()
+        pending = (
+            db.query(Invoice)
+            .filter(Invoice.user_id == user_id, Invoice.sync_status == "pending")
+            .count()
+        )
         if pending < s.min_invoice_threshold:
             next_date = _next_sync_date(s.sync_day_of_month)
             subject = "⚠️ Pocas facturas cargadas antes de la sincronización con ARCA"
@@ -64,44 +71,45 @@ async def _check_and_notify_job() -> None:
                 f"Tenés sólo {pending} factura(s) cargada(s), "
                 f"pero la sincronización con SiRADIG está programada para el {next_date.strftime('%d/%m/%Y')}.\n\n"
                 f"Por favor, cargá al menos {s.min_invoice_threshold} facturas antes de esa fecha.\n\n"
-                f"— Factura SiRADIG"
+                f"— arcaInvoices"
             )
             results = await notify(s, subject, body)
-            logger.info("Notification sent: %s", results)
+            logger.info("Notification sent (user %s): %s", user_id, results)
     except Exception as exc:
-        logger.error("Notification job error: %s", exc)
+        logger.error("Notification job error (user %s): %s", user_id, exc)
     finally:
         db.close()
 
 
-def _reschedule(scheduler: AsyncIOScheduler, sync_day: int, notify_days_before: int) -> None:
-    for job_id in ("monthly_sync", "pre_notification"):
-        if scheduler.get_job(job_id):
-            scheduler.remove_job(job_id)
+async def _daily_tick() -> None:
+    """
+    Runs once a day at 09:00. Iterates every user's settings and fires the sync
+    and/or notification job for users whose configured day matches today.
+    Reading settings live each day means no per-user cron jobs to manage.
+    """
+    from .database import SessionLocal
+    from .models import AppSettings
 
-    scheduler.add_job(
-        _run_sync_job,
-        "cron",
-        day=sync_day,
-        hour=9,
-        minute=0,
-        id="monthly_sync",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
+    today = date.today()
+    db = SessionLocal()
+    try:
+        all_settings = db.query(AppSettings).all()
+        # Snapshot the values we need before closing the session.
+        rows = [
+            (s.user_id, s.sync_day_of_month, s.notification_days_before)
+            for s in all_settings
+            if s.user_id is not None
+        ]
+    finally:
+        db.close()
 
-    notify_day = max(1, sync_day - notify_days_before)
-    scheduler.add_job(
-        _check_and_notify_job,
-        "cron",
-        day=notify_day,
-        hour=9,
-        minute=0,
-        id="pre_notification",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("Scheduled: sync on day %d, notify on day %d", sync_day, notify_day)
+    for user_id, sync_day, notify_days in rows:
+        sync_d = _effective_day(sync_day, today)
+        notify_d = _effective_day(max(1, sync_day - notify_days), today)
+        if today.day == notify_d:
+            await _notify_user(user_id)
+        if today.day == sync_d:
+            await _run_user_sync(user_id)
 
 
 def get_scheduler() -> AsyncIOScheduler:
@@ -113,26 +121,26 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 def start_scheduler() -> None:
-    from .database import SessionLocal
-    from .models import AppSettings
-
     scheduler = get_scheduler()
-    db = SessionLocal()
-    try:
-        s = db.query(AppSettings).filter(AppSettings.id == 1).first()
-        sync_day = s.sync_day_of_month if s else 20
-        notify_days = s.notification_days_before if s else 5
-    finally:
-        db.close()
-
-    _reschedule(scheduler, sync_day, notify_days)
+    scheduler.add_job(
+        _daily_tick,
+        "cron",
+        hour=9,
+        minute=0,
+        id="daily_tick",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
-    logger.info("Scheduler started")
+    logger.info("Scheduler started (daily multi-user tick at 09:00)")
 
 
-def update_schedule(sync_day: int, notify_days_before: int) -> None:
-    scheduler = get_scheduler()
-    _reschedule(scheduler, sync_day, notify_days_before)
+def update_schedule() -> None:
+    """
+    No-op kept for API compatibility. The daily tick reads each user's settings
+    live, so changing a user's sync/notify day takes effect without rescheduling.
+    """
+    return None
 
 
 def next_sync_date(sync_day: int) -> date:

@@ -1,6 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const routes = [
+  { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { public: true } },
+  { path: '/register', name: 'register', component: () => import('../views/Register.vue'), meta: { public: true } },
+  { path: '/verify', name: 'verify', component: () => import('../views/VerifyEmail.vue'), meta: { public: true } },
   { path: '/', name: 'dashboard', component: () => import('../views/Dashboard.vue') },
   { path: '/capture', name: 'capture', component: () => import('../views/Capture.vue') },
   { path: '/invoices', name: 'invoices', component: () => import('../views/Invoices.vue') },
@@ -8,7 +12,27 @@ const routes = [
   { path: '/export', name: 'export', component: () => import('../views/Export.vue') },
 ]
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+  // Resolve auth state once on first navigation.
+  if (!auth.ready) await auth.fetchMe()
+
+  if (to.meta.public) {
+    // Already authenticated users shouldn't sit on login/register.
+    if (auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
+      return { name: 'dashboard' }
+    }
+    return true
+  }
+  if (!auth.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  return true
+})
+
+export default router
