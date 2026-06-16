@@ -7,9 +7,11 @@ CUIT_DASHED = re.compile(r"\b(\d{2})[.\-–](\d{8})[.\-–](\d)\b")
 # Plain 11 digits (no separators) — validated by checksum in extractor
 CUIT_PLAIN = re.compile(r"\b(\d{11})\b")
 # Labelled form: "CUIT:", "C.U.I.T.:", "Cuit Emisor:", "CUIT: 30-70870563-9"
+# Capture group is broad (allows OCR look-alike letters); extractor normalizes them.
 CUIT_LABEL = re.compile(
     r"C\.?U\.?I\.?T\.?\s*(?:Emisor|Nro\.?|N[°º]\.?)?\s*:?\s*"
-    r"(\d{2}[\.\-–]?\d{8}[\.\-–]?\d|\d{11})",
+    r"([0-9OolIBbSsZzGg]{2}[\.\-–/]?[0-9OolIBbSsZzGg]{8}[\.\-–/]?[0-9OolIBbSsZzGg]"
+    r"|[0-9OolIBbSsZzGg\-./]{10,15})",
     re.IGNORECASE,
 )
 
@@ -18,14 +20,21 @@ CUIT_LABEL = re.compile(
 DATE_DMY_SLASH = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
 DATE_DMY_DASH  = re.compile(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b")
 DATE_DMY_DOT   = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b")
+# 2-digit year variants (dd-mm-yy) — used ONLY in label-anchored context so
+# they don't match tax rates like "(10.5)" or quantities elsewhere on the ticket.
+DATE_DMY_SLASH_YY = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b")
+DATE_DMY_DASH_YY  = re.compile(r"\b(\d{1,2})-(\d{1,2})-(\d{2})\b")
+DATE_DMY_DOT_YY   = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{2})\b")
 # Date+time: DD/MM/YYYY HH:MM or DD/MM/YYYY HH:MM:SS (transaction date on tickets)
 DATE_WITH_TIME = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\s+\d{1,2}:\d{2}")
 # Contexts that indicate a CAE expiry — NOT the transaction date
 # V/Y confusion is common in OCR (Vto. → Yto.)
 DATE_VTO_CONTEXT = re.compile(r"[VvYy]to\.?|[Vv]enc(?:imiento)?\.?", re.IGNORECASE)
 # Date labels that appear before the date value
+# Tolerates OCR noise between the label and the value, e.g. "Fecha:" misread as
+# "Fechas" or "Fecha;" — up to 4 non-digit chars are allowed before the date.
 DATE_LABEL = re.compile(
-    r"(?:Fecha\s*(?:de\s*(?:Emisi[oó]n|Comprobante))?|Date)\s*[:\s]+",
+    r"(?:Fecha(?:\s*de\s*(?:Emisi[oó]n|Comprobante))?|Date)[^\d\n]{0,4}",
     re.IGNORECASE,
 )
 
@@ -34,20 +43,33 @@ DATE_LABEL = re.compile(
 #   Punto de venta: 4 digits (original) or 5 digits (from Oct 2018) → \d{4,5}
 #   Número de comprobante: 8 digits                                  → \d{8}
 #   Printed as: XXXXX-XXXXXXXX  or  XXXX-XXXXXXXX
-INVOICE_JOINED = re.compile(r"\b(\d{4,5})[–\-](\d{8})\b")
+# Allow OCR spaces around the dash: "00197-00012370", "00197- 00012370",
+# "00197 - 00012370" all read as one comprobante.
+INVOICE_JOINED = re.compile(r"\b(\d{4,5})\s*[–\-]\s*(\d{8})\b")
 INVOICE_SPACED = re.compile(r"\b(\d{4,5})\s{1,3}(\d{8})\b")
 
-# Labels that precede the comprobante number on facturas and tickets
+# Split layout used by Makro and other fiscal-controller tickets: the punto de
+# venta and the comprobante number are two separately-labelled fields, e.g.
+#   "P.V. Nro.:1776   Nro T. 00119564"  →  01776-00119564
+# Group 1 = punto de venta (under "P.V. Nro."), group 2 = comprobante ("Nro T.").
+INVOICE_PV_NROT = re.compile(
+    r"P\.?\s*V\.?\s*Nro\.?\s*[:.]?\s*(\d{1,5})"   # P.V. Nro.: 1776
+    r"\s*Nro\.?\s*T\.?\s*[:.]?\s*(\d{4,8})",      # Nro T. 00119564
+    re.IGNORECASE,
+)
+
+# Labels that precede the comprobante number on facturas and tickets.
+# [.,lL]? handles OCR variants: comma instead of dot, and 'L' substituted for '.'.
 INVOICE_LABELS = re.compile(
-    r"(?:nro\.?\s*comp(?:robante)?|"   # NRO.COMP: or NRO.COMPROBANTE: — most specific first
-    r"n[°º]\.?\s*comp(?:robante)?|"
+    r"(?:nro[lL]?[.,]?\s*comp(?:robante)?|"   # NRO.COMP, NRO,COMP, NROLCOMP, NROLCOMP+
+    r"n[°º][.,]?\s*comp(?:robante)?|"
     r"comprobante\s*(?:nro|n[uú]mero|n[°º])?|"
     r"n[uú]mero\s*(?:de\s*)?comprobante|"
     r"factura\s*(?:nro|n[°º])?|"
     r"tique\s*(?:nro|n[°º])?|"
     r"ticket\s*(?:nro|n[°º])?|"
     r"recibo\s*(?:nro|n[°º])?|"
-    r"n[°º]\.?\s*(?:comp)?)",
+    r"n[°º][.,]?\s*(?:comp)?)",
     re.IGNORECASE,
 )
 

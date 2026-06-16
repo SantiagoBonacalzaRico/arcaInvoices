@@ -95,7 +95,7 @@
         <strong>Opción B — Padrón oficial de ARCA</strong> <span class="optional">(requiere CUIT)</span>
         <p class="hint">
           Usa el servicio <code>ws_sr_padron_a13</code> de ARCA. Requiere ingresar tu CUIT
-          y tener el certificado digital configurado en el servidor (ver README).
+          y configurar un certificado digital. El asistente de abajo lo hace paso a paso.
         </p>
         <div class="form-row">
           <div class="form-group">
@@ -108,6 +108,10 @@
             </label>
           </div>
         </div>
+        <button class="btn btn-outline btn-sm mt" @click="openCertWizard" :disabled="csrLoading">
+          {{ csrLoading ? 'Generando…' : '🔐 Configurar certificado paso a paso' }}
+        </button>
+        <p v-if="certInlineError" class="error-msg">{{ certInlineError }}</p>
       </div>
     </div>
 
@@ -120,13 +124,89 @@
     <p v-if="saveMsg?.error" class="error-msg" style="text-align:right;margin-top:.5rem">
       {{ saveMsg.text }}
     </p>
+
+    <!-- AFIP certificate wizard modal -->
+    <transition name="fade">
+      <div v-if="showCertModal" class="modal-overlay" @click.self="showCertModal = false">
+        <div class="modal-card">
+          <button class="modal-close" @click="showCertModal = false" aria-label="Cerrar">✕</button>
+          <h2 class="modal-title">Configurar certificado de ARCA</h2>
+          <p class="hint">
+            Seguí estos pasos para habilitar la búsqueda de razón social con el servicio
+            oficial <code>ws_sr_padron_a13</code>.
+          </p>
+
+          <!-- Paso 1 -->
+          <div class="wiz-step">
+            <div class="wiz-head"><span class="wiz-num done">✓</span> <strong>Paso 1 — Generar pedido (CSR)</strong></div>
+            <p class="hint">
+              Listo: generamos tu clave privada y el archivo <code>request.csr</code> para tu CUIT
+              <strong>{{ form.afip_cuit }}</strong>. La clave privada queda en tu equipo y nunca se comparte.
+            </p>
+            <a :href="downloadCsrUrl" class="btn btn-outline btn-sm" download>⬇ Descargar request.csr</a>
+            <p class="hint" style="margin-top:.5rem">
+              Usá <strong>siempre este botón</strong> para bajar el CSR (coincide con tu clave actual).
+              <a href="#" @click.prevent="regenerateCsr">¿Empezar de cero? Regenerar clave y CSR</a>.
+            </p>
+          </div>
+
+          <!-- Paso 2 -->
+          <div class="wiz-step">
+            <div class="wiz-head"><span class="wiz-num">2</span> <strong>Paso 2 — Subir el CSR a ARCA</strong></div>
+            <ol class="wiz-list">
+              <li>Entrá a <a href="https://auth.afip.gob.ar" target="_blank">auth.afip.gob.ar</a> con tu CUIT y Clave Fiscal (nivel 2 o superior).</li>
+              <li>Abrí el servicio <strong>«Administrador de Certificados Digitales»</strong>.
+                <span class="hint">Si no lo ves, agregalo desde «Administrador de Relaciones de Clave Fiscal» → Adherir servicio → ARCA.</span></li>
+              <li>Hacé clic en <strong>«Agregar alias»</strong>, ponele un nombre (ej. <code>factura-siradig</code>) y subí el archivo <code>request.csr</code> que descargaste.</li>
+              <li><strong>Descargá</strong> el certificado que te genera ARCA (archivo <code>.crt</code> / <code>.pem</code>).</li>
+            </ol>
+          </div>
+
+          <!-- Paso 3 -->
+          <div class="wiz-step">
+            <div class="wiz-head"><span class="wiz-num" :class="{ done: certUploaded }">{{ certUploaded ? '✓' : '3' }}</span> <strong>Paso 3 — Subir el certificado (.crt)</strong></div>
+            <p class="hint">Elegí el archivo <code>.crt</code> que descargaste de ARCA:</p>
+            <input type="file" accept=".crt,.pem,.cer,.txt" @change="onCertFile" />
+            <button class="btn btn-primary btn-sm mt" :disabled="!certPem || uploadingCert" @click="uploadCertFile">
+              {{ uploadingCert ? 'Subiendo…' : 'Subir certificado' }}
+            </button>
+            <p v-if="certUploadMsg" :class="certUploadMsg.error ? 'error-msg' : 'ok-msg'">{{ certUploadMsg.text }}</p>
+          </div>
+
+          <!-- Paso 4 -->
+          <div class="wiz-step">
+            <div class="wiz-head"><span class="wiz-num">4</span> <strong>Paso 4 — Autorizar el servicio y probar</strong></div>
+            <p class="hint">
+              En ARCA → <strong>«Administrador de Relaciones de Clave Fiscal»</strong>, autorizá el
+              servicio <code>ws_sr_padron_a13</code> («Padrón ARCA Alcance 13») para tu CUIT,
+              vinculado a este certificado. Luego probá una búsqueda:
+            </p>
+            <div class="test-row">
+              <input v-model="testCuit" placeholder="CUIT a consultar (ej. 30-58962149-9)" />
+              <button class="btn btn-outline btn-sm" :disabled="!testCuit || testingLookup" @click="testLookup">
+                {{ testingLookup ? 'Consultando…' : 'Probar búsqueda' }}
+              </button>
+            </div>
+            <p v-if="lookupResult"
+               :class="lookupResult.ok ? 'ok-msg' : 'error-msg'">
+              {{ lookupResult.ok
+                  ? `✓ ${lookupResult.razon_social}  (fuente: ${lookupResult.source})`
+                  : `✕ ${lookupResult.error}` }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
-import { getSettings, updateSettings, testNotification } from '../api'
+import {
+  getSettings, updateSettings, testNotification,
+  generateCsr, uploadCert, downloadCsrUrl, diagnoseCuit,
+} from '../api'
 
 const pageTop = ref(null)
 
@@ -143,6 +223,90 @@ const saving        = ref(false)
 const saveMsg       = ref(null)
 const testingNotif  = ref(false)
 const notifResult   = ref(null)
+
+// ── AFIP certificate wizard ──────────────────────────────────────────────────
+const showCertModal  = ref(false)
+const csrLoading     = ref(false)
+const certInlineError = ref('')
+const certPem        = ref('')
+const certUploaded   = ref(false)
+const uploadingCert  = ref(false)
+const certUploadMsg  = ref(null)
+const testCuit       = ref('')
+const testingLookup  = ref(false)
+const lookupResult   = ref(null)
+
+async function openCertWizard() {
+  certInlineError.value = ''
+  if (!form.afip_cuit) {
+    certInlineError.value = 'Ingresá tu CUIT arriba antes de generar el certificado.'
+    return
+  }
+  csrLoading.value = true
+  try {
+    // Persist the CUIT first so the CSR is tied to it, then generate the CSR.
+    await updateSettings({ ...form })
+    await generateCsr()
+    showCertModal.value = true
+  } catch (e) {
+    certInlineError.value = e.response?.data?.detail || 'No se pudo generar el CSR.'
+  } finally {
+    csrLoading.value = false
+  }
+}
+
+async function regenerateCsr() {
+  if (!confirm('Esto crea una NUEVA clave privada. El certificado que ya tengas registrado en ARCA dejará de servir y tendrás que registrar el CSR nuevo. ¿Continuar?')) return
+  csrLoading.value = true
+  try {
+    await generateCsr(true)
+    certUploaded.value = false
+    certUploadMsg.value = null
+    lookupResult.value = null
+    alert('Clave y CSR regenerados. Descargá el nuevo request.csr y registralo en ARCA.')
+  } catch (e) {
+    certInlineError.value = e.response?.data?.detail || 'No se pudo regenerar el CSR.'
+  } finally {
+    csrLoading.value = false
+  }
+}
+
+function onCertFile(e) {
+  const file = e.target.files?.[0]
+  certUploadMsg.value = null
+  if (!file) { certPem.value = ''; return }
+  const reader = new FileReader()
+  reader.onload = () => { certPem.value = String(reader.result || '') }
+  reader.readAsText(file)
+}
+
+async function uploadCertFile() {
+  uploadingCert.value = true
+  certUploadMsg.value = null
+  try {
+    await uploadCert(certPem.value)
+    certUploaded.value = true
+    certUploadMsg.value = { text: 'Certificado subido correctamente.', error: false }
+    await load()
+  } catch (e) {
+    certUploadMsg.value = { text: e.response?.data?.detail || 'Certificado inválido.', error: true }
+  } finally {
+    uploadingCert.value = false
+  }
+}
+
+async function testLookup() {
+  testingLookup.value = true
+  lookupResult.value = null
+  try {
+    const { data } = await diagnoseCuit(testCuit.value)
+    lookupResult.value = data
+  } catch (e) {
+    lookupResult.value = { ok: false, error: e.response?.data?.detail || e.message }
+  } finally {
+    testingLookup.value = false
+  }
+}
 
 async function pickFolder() {
   pickingFolder.value = true
@@ -237,4 +401,38 @@ h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; color: #333; }
 .optional { font-size: .75rem; color: #888; font-weight: 400; margin-left: .3rem; }
 .ok-msg   { color: #2e7d32; font-size: .85rem; margin-top: .5rem; }
 .error-msg { color: #b71c1c; font-size: .85rem; margin-top: .5rem; }
+
+/* AFIP certificate wizard modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 2rem 1rem; z-index: 1000; overflow-y: auto;
+}
+.modal-card {
+  background: #fff; border-radius: 14px; padding: 1.5rem 1.75rem;
+  max-width: 620px; width: 100%; position: relative;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+}
+.modal-close {
+  position: absolute; top: .9rem; right: 1rem; border: none; background: transparent;
+  font-size: 1.1rem; cursor: pointer; color: #888; line-height: 1;
+}
+.modal-close:hover { color: #333; }
+.modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: .35rem; }
+.wiz-step {
+  border: 1px solid #e6e8ee; border-radius: 10px;
+  padding: .9rem 1rem; margin-top: .9rem;
+}
+.wiz-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; font-size: .95rem; }
+.wiz-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #e7ebf3; color: #445; font-size: .8rem; font-weight: 700; flex-shrink: 0;
+}
+.wiz-num.done { background: #d6f0dd; color: #1a7f37; }
+.wiz-list { margin: .25rem 0 0 1.1rem; padding: 0; font-size: .85rem; color: #555; }
+.wiz-list li { margin-bottom: .4rem; }
+.wiz-list .hint { display: block; margin: .15rem 0 0; }
+.test-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.test-row input { flex: 1 1 220px; }
 </style>
