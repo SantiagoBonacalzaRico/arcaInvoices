@@ -1,0 +1,31 @@
+# Build context is the repo root — keep it lean and never ship secrets/data.
+
+# Python
+**/__pycache__/
+**/*.pyc
+backend/venv/
+backend/.pytest_cache/
+
+# Local database, uploaded images, certs, backups — provided at runtime via a
+# mounted volume + RDS, never baked into the image.
+backend/data/
+
+# Node / frontend build artifacts (the image rebuilds the frontend itself)
+frontend/node_modules/
+frontend/dist/
+
+# Secrets & personal credentials
+.env
+.env.*
+!.env.example
+certs/
+
+# VCS / editor / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Docs & infra not needed inside the image
+*.md

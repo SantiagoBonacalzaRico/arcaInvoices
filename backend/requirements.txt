@@ -22,3 +22,4 @@ bcrypt==4.2.1
 authlib==1.4.0
 itsdangerous==2.2.0
 email-validator==2.2.0
+psycopg2-binary==2.9.10

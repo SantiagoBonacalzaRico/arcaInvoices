@@ -1,21 +1,17 @@
-version: "3.9"
-
 services:
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
+    # Uploaded invoice images + AFIP certs persist across redeploys.
+    # In the cloud this maps to an EBS-backed host dir; locally a named volume.
     volumes:
-      - ./data:/app/data
+      - appdata:/app/data
     env_file:
       - .env
     restart: unless-stopped
 
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    command: sh -c "npm install && npm run build"
-    profiles:
-      - build
+volumes:
+  appdata:
