@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+aws_region     = "sa-east-1"
+github_repo    = "SantiagoBonacalzaRico/arcaInvoices"
+github_branch  = "master"
+
+alert_email    = "you@example.com"   # billing alerts
+admin_email    = "you@example.com"   # seeded app owner/admin (first login)
+admin_username = "admin"

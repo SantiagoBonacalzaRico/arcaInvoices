@@ -1,0 +1,13 @@
+# Terraform
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Real variable values (keep terraform.tfvars.example tracked)
+*.tfvars
+!*.tfvars.example
+
+# Keep .terraform.lock.hcl tracked (pins provider versions).
