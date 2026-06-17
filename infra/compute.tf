@@ -32,6 +32,9 @@ data "aws_iam_policy_document" "ec2_ssm_read" {
     sid     = "ReadAppParams"
     actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
     resources = [
+      # GetParametersByPath authorizes against the path itself...
+      "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}",
+      # ...GetParameter(s) against the individual child parameters.
       "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/*",
     ]
   }
