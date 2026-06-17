@@ -26,7 +26,7 @@ jobs:
       - name: System libs for OCR/barcode imports
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libzbar0 libgl1
       - name: Install deps
-        run: pip install -r backend/requirements.txt
+        run: pip install -r backend/requirements.txt pytest
       - name: Run tests
         working-directory: backend
         run: python -m pytest -q
