@@ -14,7 +14,7 @@ resource "aws_db_instance" "this" {
   password = random_password.db.result
 
   allocated_storage = 20
-  storage_type      = "gp3"
+  storage_type      = "gp2" # free-tier storage type
   storage_encrypted = true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
@@ -22,8 +22,9 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = false
   multi_az               = false
 
-  # Cost/free-tier friendly + safe-to-recreate while we're still setting up.
-  backup_retention_period   = 7
+  # Free-tier friendly: 1-day automated backups (the plan caps retention) and
+  # safe-to-recreate while we're still setting up.
+  backup_retention_period    = 1
   auto_minor_version_upgrade = true
   deletion_protection        = false
   skip_final_snapshot        = true
