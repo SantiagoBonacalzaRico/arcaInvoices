@@ -1,0 +1,31 @@
+# Production stack on the EC2 box (/opt/arcainvoices).
+# IMAGE_URI and SITE_ADDRESS are interpolated from /opt/arcainvoices/.env,
+# which deploy.sh renders from SSM Parameter Store.
+services:
+  app:
+    image: ${IMAGE_URI}
+    env_file: .env
+    volumes:
+      - /opt/arcainvoices/data:/app/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - /opt/arcainvoices/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

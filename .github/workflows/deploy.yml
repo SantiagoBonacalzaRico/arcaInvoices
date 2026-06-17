@@ -1,0 +1,102 @@
+name: deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC -> assume AWS role
+  contents: read
+
+env:
+  AWS_REGION: sa-east-1
+  ECR_REPO: 879366471813.dkr.ecr.sa-east-1.amazonaws.com/arcainvoices
+  ROLE_ARN: arn:aws:iam::879366471813:role/arcainvoices-github-actions
+  INSTANCE_TAG: arcainvoices-app
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: System libs for OCR/barcode imports
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libzbar0 libgl1
+      - name: Install deps
+        run: pip install -r backend/requirements.txt
+      - name: Run tests
+        working-directory: backend
+        run: python -m pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image (linux/amd64)
+        run: |
+          set -euo pipefail
+          IMAGE="$ECR_REPO:${GITHUB_SHA::12}"
+          docker build -f backend/Dockerfile -t "$IMAGE" -t "$ECR_REPO:latest" .
+          docker push "$IMAGE"
+          docker push "$ECR_REPO:latest"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy on instance via SSM
+        run: |
+          set -euo pipefail
+          B64_COMPOSE=$(base64 -w0 deploy/docker-compose.prod.yml)
+          B64_CADDY=$(base64 -w0 deploy/Caddyfile)
+          B64_DEPLOY=$(base64 -w0 deploy/deploy.sh)
+
+          cat > /tmp/params.json <<JSON
+          {"commands":[
+            "set -e",
+            "mkdir -p /opt/arcainvoices/data",
+            "echo '${B64_COMPOSE}' | base64 -d > /opt/arcainvoices/docker-compose.prod.yml",
+            "echo '${B64_CADDY}' | base64 -d > /opt/arcainvoices/Caddyfile",
+            "echo '${B64_DEPLOY}' | base64 -d > /opt/arcainvoices/deploy.sh",
+            "chmod +x /opt/arcainvoices/deploy.sh",
+            "/opt/arcainvoices/deploy.sh ${IMAGE}"
+          ]}
+          JSON
+
+          CID=$(aws ssm send-command \
+            --targets "Key=tag:Name,Values=${INSTANCE_TAG}" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${GITHUB_SHA::12}" \
+            --parameters file:///tmp/params.json \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CID"
+
+          # Wait for completion
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CID" --instance-id "$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${INSTANCE_TAG}" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text)" --query Status --output text 2>/dev/null || echo Pending)
+            echo "status: $STATUS"
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+            sleep 5
+          done
+
+          IID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=${INSTANCE_TAG}" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text)
+          echo "----- deploy stdout -----"
+          aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" --query StandardOutputContent --output text || true
+          echo "----- deploy stderr -----"
+          aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" --query StandardErrorContent --output text || true
+          FINAL=$(aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" --query Status --output text)
+          echo "final: $FINAL"
+          [ "$FINAL" = "Success" ]
