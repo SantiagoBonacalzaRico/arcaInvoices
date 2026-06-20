@@ -10,6 +10,7 @@ const routes = [
   { path: '/invoices', name: 'invoices', component: () => import('../views/Invoices.vue') },
   { path: '/settings', name: 'settings', component: () => import('../views/Settings.vue') },
   { path: '/export', name: 'export', component: () => import('../views/Export.vue') },
+  { path: '/siradig', name: 'siradig', component: () => import('../views/Siradig.vue') },
 ]
 
 const router = createRouter({

@@ -22,6 +22,7 @@ async function onLogout() {
         <router-link to="/capture">Escanear</router-link>
         <router-link to="/invoices">Facturas</router-link>
         <router-link to="/export">Exportar</router-link>
+        <router-link to="/siradig">Cargar SiRADIG</router-link>
         <router-link to="/settings">Configuración</router-link>
       </div>
       <div class="nav-user">

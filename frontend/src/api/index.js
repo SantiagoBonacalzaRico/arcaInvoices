@@ -62,7 +62,6 @@ export const recordCorrection = (data) => api.post('/invoices/corrections', data
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
 
-export const triggerSync = () => api.post('/sync/trigger')
 export const syncStatus = () => api.get('/sync/status')
 export const syncHistory = (limit = 20) => api.get('/sync/history', { params: { limit } })
 

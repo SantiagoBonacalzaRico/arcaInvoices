@@ -34,20 +34,6 @@ def _effective_day(target_day: int, today: date) -> int:
     return min(target_day, monthrange(today.year, today.month)[1])
 
 
-async def _run_user_sync(user_id: int) -> None:
-    from .database import SessionLocal
-    from .afip.siradig import run_sync
-
-    db = SessionLocal()
-    try:
-        log = run_sync(db, user_id)
-        logger.info("Sync (user %s): status=%s synced=%d", user_id, log.status, log.invoices_synced)
-    except Exception as exc:
-        logger.error("Sync job error (user %s): %s", user_id, exc)
-    finally:
-        db.close()
-
-
 async def _notify_user(user_id: int) -> None:
     from .database import SessionLocal
     from .models import AppSettings, Invoice
@@ -83,8 +69,8 @@ async def _notify_user(user_id: int) -> None:
 
 async def _daily_tick() -> None:
     """
-    Runs once a day at 09:00. Iterates every user's settings and fires the sync
-    and/or notification job for users whose configured day matches today.
+    Runs once a day at 09:00. Iterates every user's settings and sends the
+    pre-load reminder to users whose notification day matches today.
     Reading settings live each day means no per-user cron jobs to manage.
     """
     from .database import SessionLocal
@@ -103,13 +89,12 @@ async def _daily_tick() -> None:
     finally:
         db.close()
 
+    # Reminder only — there is no ARCA API, so nothing is submitted automatically.
+    # Users load their invoices manually via the SiRADIG co-pilot.
     for user_id, sync_day, notify_days in rows:
-        sync_d = _effective_day(sync_day, today)
         notify_d = _effective_day(max(1, sync_day - notify_days), today)
         if today.day == notify_d:
             await _notify_user(user_id)
-        if today.day == sync_d:
-            await _run_user_sync(user_id)
 
 
 def get_scheduler() -> AsyncIOScheduler:

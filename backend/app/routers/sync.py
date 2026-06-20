@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -10,17 +10,9 @@ from ..scheduler import next_sync_date
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
-
-@router.post("/trigger", response_model=SyncLogOut)
-def trigger_sync(
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    """Manually trigger a sync to ARCA/SiRADIG."""
-    from ..afip.siradig import run_sync
-    log = run_sync(db, user.id)
-    return log
+# Note: there is no public ARCA API to submit the F.572, so there is no
+# automated "sync". Invoices are loaded manually via the SiRADIG co-pilot;
+# these endpoints only report progress + the target load date.
 
 
 @router.get("/status", response_model=SyncStatusOut)
