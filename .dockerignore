@@ -29,3 +29,7 @@ certs/
 
 # Docs & infra not needed inside the image
 *.md
+
+# Capacitor native projects (not needed for the web image)
+frontend/android/
+frontend/ios/

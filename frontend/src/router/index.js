@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { isNative, loadToken } from '../lib/native'
 
 const routes = [
   { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { public: true } },
@@ -19,9 +20,16 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // "Cargar SiRADIG" is excluded from the native apps (separate epic).
+  if (isNative() && to.name === 'siradig') return { name: 'dashboard' }
+
   const auth = useAuthStore()
-  // Resolve auth state once on first navigation.
-  if (!auth.ready) await auth.fetchMe()
+  // Resolve auth state once on first navigation. Hydrate the native bearer
+  // token BEFORE the first /auth/me, otherwise it races and 401s on relaunch.
+  if (!auth.ready) {
+    await loadToken()
+    await auth.fetchMe()
+  }
 
   if (to.meta.public) {
     // Already authenticated users shouldn't sit on login/register.

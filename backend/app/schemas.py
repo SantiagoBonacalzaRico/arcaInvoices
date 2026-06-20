@@ -30,6 +30,12 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AuthOut(UserOut):
+    # Same user fields the web reads, plus a bearer token for native apps
+    # (web ignores this and keeps using the HTTP-only cookie).
+    access_token: Optional[str] = None
+
+
 class InviteCreateRequest(BaseModel):
     email: Optional[EmailStr] = None
     expires_days: int = Field(7, ge=1, le=365)

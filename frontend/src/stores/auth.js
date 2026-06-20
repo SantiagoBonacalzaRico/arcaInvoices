@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import * as api from '../api'
+import { setToken } from '../lib/native'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -24,11 +25,14 @@ export const useAuthStore = defineStore('auth', {
     },
     async login(identifier, password) {
       const { data } = await api.login(identifier, password)
+      // On native, persist the bearer token (web ignores it; uses the cookie).
+      await setToken(data.access_token)
       this.user = data
       return data
     },
     async logout() {
       try { await api.logout() } catch { /* ignore */ }
+      await setToken(null)
       this.user = null
     },
   },

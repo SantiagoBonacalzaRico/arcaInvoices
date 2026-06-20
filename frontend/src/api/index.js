@@ -1,7 +1,19 @@
 import axios from 'axios'
+import { getTokenSync } from '../lib/native'
 
-// withCredentials so the HTTP-only session cookie is sent with every request.
-const api = axios.create({ baseURL: '/api', withCredentials: true })
+// Web: relative '/api' (same origin) + HTTP-only cookie.
+// Native (Capacitor): absolute API URL via VITE_API_BASE + bearer token.
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE || '/api',
+  withCredentials: true,
+})
+
+// Attach the bearer token on native (no-op on web, where the cookie is used).
+api.interceptors.request.use((config) => {
+  const t = getTokenSync()
+  if (t) config.headers.Authorization = `Bearer ${t}`
+  return config
+})
 
 // On 401, bounce to the login page (unless we're already on an auth page or
 // just probing /auth/me on startup).
@@ -69,6 +81,7 @@ export const syncHistory = (limit = 20) => api.get('/sync/history', { params: { 
 
 export const getSettings = () => api.get('/settings')
 export const updateSettings = (data) => api.put('/settings', data)
+export const pickFolder = () => api.post('/settings/pick-folder')
 export const getAfipSetupGuide = () => api.get('/settings/afip-setup-guide')
 export const generateCsr = (force = false) => api.post('/settings/afip/generate-csr', null, { params: force ? { force: true } : {} })
 export const downloadCsrUrl = '/api/settings/afip/download-csr'
@@ -80,3 +93,11 @@ export const testNotification = () => api.post('/settings/test-notification')
 
 export const diagnoseCuit = (cuit) => api.get(`/cuit/${encodeURIComponent(cuit)}/diagnose`)
 export const listCuits = () => api.get('/cuits')
+export const setRazonSocial = (cuit, razon_social) =>
+  api.post(`/cuit/${encodeURIComponent(cuit)}`, null, { params: { razon_social } })
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+
+export const exportSummary = (params = {}) => api.get('/export/summary', { params })
+export const exportCategories = () => api.get('/export/categories')
+export const downloadCsv = (params = {}) => api.get('/export/csv', { params, responseType: 'blob' })

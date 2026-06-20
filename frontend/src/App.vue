@@ -1,11 +1,29 @@
 <script setup>
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
+import { isNative } from './lib/native'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const showNav = computed(() => auth.isAuthenticated)
+// "Cargar SiRADIG" is a separate mobile epic — hide it in the native apps.
+const native = isNative()
+
+// On native the nav is a single horizontally-scrollable line; when the selected
+// item is partly off-screen, scroll it fully into view.
+function scrollActiveIntoView() {
+  if (!native) return
+  const nav = document.querySelector('.nav-links')
+  const active = nav?.querySelector('a.router-link-exact-active, a.router-link-active')
+  if (!nav || !active) return
+  const navRect = nav.getBoundingClientRect()
+  const aRect = active.getBoundingClientRect()
+  const delta = (aRect.left + aRect.width / 2) - (navRect.left + navRect.width / 2)
+  nav.scrollBy({ left: delta, behavior: 'smooth' })
+}
+watch(() => route.fullPath, () => nextTick(scrollActiveIntoView), { immediate: true })
 
 async function onLogout() {
   await auth.logout()
@@ -22,7 +40,7 @@ async function onLogout() {
         <router-link to="/capture">Escanear</router-link>
         <router-link to="/invoices">Facturas</router-link>
         <router-link to="/export">Exportar</router-link>
-        <router-link to="/siradig">Cargar SiRADIG</router-link>
+        <router-link v-if="!native" to="/siradig">Cargar SiRADIG</router-link>
         <router-link to="/settings">Configuración</router-link>
       </div>
       <div class="nav-user">
@@ -90,6 +108,22 @@ body {
   font-weight: 600;
 }
 .nav-logout:hover { background: rgba(255,255,255,.3); }
+
+/* Native app only (.native on <html>): keep the options on ONE horizontally
+   scrollable line. The PWA is intentionally left unchanged. */
+.native .navbar { flex-wrap: wrap; gap: .5rem; padding: .6rem 1rem; }
+.native .nav-user { order: 2; }
+.native .nav-links {
+  order: 3;
+  width: 100%;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  gap: .25rem;
+}
+.native .nav-links::-webkit-scrollbar { display: none; }
+.native .nav-links a { flex: 0 0 auto; white-space: nowrap; font-size: .85rem; padding: .3rem .6rem; }
 
 .content { flex: 1; padding: 1.5rem; max-width: 900px; margin: 0 auto; width: 100%; }
 

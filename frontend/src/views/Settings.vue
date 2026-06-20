@@ -202,10 +202,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import axios from 'axios'
 import {
   getSettings, updateSettings, testNotification,
-  generateCsr, uploadCert, downloadCsrUrl, diagnoseCuit,
+  generateCsr, uploadCert, downloadCsrUrl, diagnoseCuit, pickFolder as pickFolderApi,
 } from '../api'
 
 const pageTop = ref(null)
@@ -312,7 +311,7 @@ async function pickFolder() {
   pickingFolder.value = true
   folderError.value = ''
   try {
-    const { data } = await axios.post('/api/settings/pick-folder')
+    const { data } = await pickFolderApi()
     if (data?.path) form.invoice_dir = data.path
   } catch (e) {
     if (e.response?.status === 204) return

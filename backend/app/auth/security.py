@@ -77,10 +77,18 @@ def clear_session_cookie(response: Response) -> None:
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
 
+def _token_from_request(request: Request) -> Optional[str]:
+    """Bearer header (native apps) takes precedence over the cookie (web)."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip() or None
+    return request.cookies.get(settings.cookie_name)
+
+
 def get_current_user(
     request: Request, db: Session = Depends(get_db)
 ) -> User:
-    token = request.cookies.get(settings.cookie_name)
+    token = _token_from_request(request)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     user_id = _decode_token(token)

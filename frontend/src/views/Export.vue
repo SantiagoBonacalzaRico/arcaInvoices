@@ -11,7 +11,9 @@
           <option value="pending">Pendientes</option>
           <option value="synced">Sincronizados</option>
         </select>
-        <a :href="csvUrl" class="btn btn-primary" download>⬇ Descargar CSV</a>
+        <button class="btn btn-primary" @click="downloadCsvFile" :disabled="downloading">
+          {{ downloading ? 'Generando…' : '⬇ Descargar CSV' }}
+        </button>
       </div>
     </div>
 
@@ -61,20 +63,21 @@
         </div>
 
         <!-- Invoice table -->
+        <div class="tablewrap">
         <table class="inv-table">
           <thead>
             <tr>
-              <th>Nro Comprobante</th>
+              <th>{{ native ? 'Comprob.' : 'Nro Comprobante' }}</th>
               <th>Fecha</th>
-              <th class="right">Importe</th>
-              <th>Categoría</th>
-              <th>Estado</th>
+              <th class="right">{{ native ? '$' : 'Importe' }}</th>
+              <th>{{ native ? 'Cat.' : 'Categoría' }}</th>
+              <th>{{ native ? 'Est.' : 'Estado' }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="inv in g.invoices" :key="inv.id">
               <td class="mono">{{ inv.invoice_number }}</td>
-              <td>{{ inv.date }}</td>
+              <td class="date-cell">{{ native ? fmtDateShort(inv.date) : inv.date }}</td>
               <td class="right mono">{{ inv.amount }}</td>
               <td>
                 <select v-model="inv.category" @change="updateCategory(inv)" class="cat-select">
@@ -93,6 +96,7 @@
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
     </div>
   </div>
@@ -100,16 +104,23 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
-import { updateInvoice } from '../api'
-import axios from 'axios'
+import { updateInvoice, exportSummary, exportCategories, setRazonSocial, downloadCsv } from '../api'
+import { isNative } from '../lib/native'
 
-const api = axios.create({ baseURL: '/api' })
+const native = isNative()
+
+function fmtDateShort(iso) {
+  if (!iso) return ''
+  const [y, m, d] = String(iso).split('-')
+  return `${d}/${m}/${y.slice(2)}`
+}
 
 const fiscalYear = ref(new Date().getFullYear())
 const filterStatus = ref('pending')
 const groups = ref([])
 const categories = ref([])
 const loading = ref(true)
+const downloading = ref(false)
 const editingRS = reactive({})
 const rsForm = reactive({})
 
@@ -118,12 +129,12 @@ const years = computed(() => {
   return [yr, yr - 1, yr - 2]
 })
 
-const csvUrl = computed(() => {
-  const params = new URLSearchParams()
-  if (fiscalYear.value) params.set('fiscal_year', fiscalYear.value)
-  if (filterStatus.value) params.set('sync_status', filterStatus.value)
-  return `/api/export/csv?${params}`
-})
+function currentParams() {
+  const params = {}
+  if (fiscalYear.value) params.fiscal_year = fiscalYear.value
+  if (filterStatus.value) params.sync_status = filterStatus.value
+  return params
+}
 
 const totalInvoices = computed(() => groups.value.reduce((s, g) => s + g.invoices.length, 0))
 const grandTotal = computed(() =>
@@ -136,17 +147,42 @@ function fmtARS(val) {
 
 async function load() {
   loading.value = true
-  const params = {}
-  if (fiscalYear.value) params.fiscal_year = fiscalYear.value
-  if (filterStatus.value) params.sync_status = filterStatus.value
-  const res = await api.get('/export/summary', { params })
-  groups.value = res.data
-  loading.value = false
+  try {
+    const res = await exportSummary(currentParams())
+    groups.value = res.data
+  } catch {
+    groups.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadCategories() {
-  const res = await api.get('/export/categories')
-  categories.value = res.data
+  try {
+    const res = await exportCategories()
+    categories.value = res.data
+  } catch {
+    categories.value = []
+  }
+}
+
+async function downloadCsvFile() {
+  downloading.value = true
+  try {
+    const res = await downloadCsv(currentParams())
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `facturas_${fiscalYear.value || 'todas'}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    alert('No se pudo generar el CSV.')
+  } finally {
+    downloading.value = false
+  }
 }
 
 function startEditRS(g) {
@@ -156,7 +192,7 @@ function startEditRS(g) {
 
 async function saveRS(g) {
   if (!rsForm[g.cuit]?.trim()) return
-  await api.post(`/cuit/${g.cuit}`, null, { params: { razon_social: rsForm[g.cuit] } })
+  await setRazonSocial(g.cuit, rsForm[g.cuit])
   g.razon_social = rsForm[g.cuit]
   editingRS[g.cuit] = false
 }
@@ -204,4 +240,14 @@ onMounted(async () => {
 .cat-select { padding: .3rem .5rem; border-radius: 6px; border: 1.5px solid #d0d7de; font-size: .82rem; max-width: 220px; }
 .muted { color: #888; }
 .center { text-align: center; padding: 2rem; }
+
+/* Native app only: ONLY the invoice table scrolls horizontally (the vendor
+   header, totals and the rest stay static). width:max-content lets the table
+   grow past the viewport so the wrapper scrolls instead of squeezing columns.
+   PWA layout unchanged. */
+.native .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.native .inv-table { font-size: .8rem; width: max-content; min-width: 100%; }
+.native .inv-table th,
+.native .inv-table td { white-space: nowrap; }
+.native .cat-select { max-width: 160px; }
 </style>

@@ -25,7 +25,15 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+    # Dev (Vite) + Capacitor native WebView origins. In the cloud, CORS_ORIGINS
+    # (SSM) must also include the public site URL and these capacitor origins.
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "capacitor://localhost",
+        "http://localhost",
+        "https://localhost",
+    ]
 
     # AFIP (populated from DB settings row; these are defaults only)
     afip_cuit: str = ""

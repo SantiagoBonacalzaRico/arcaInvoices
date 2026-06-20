@@ -17,6 +17,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import EmailVerification, InviteCode, User
 from ..schemas import (
+    AuthOut,
     InviteCreateRequest,
     InviteOut,
     LoginRequest,
@@ -117,7 +118,7 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 
 # ── Password login / logout ──────────────────────────────────────────────────
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=AuthOut)
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     ident = payload.identifier.strip()
     user = (
@@ -131,8 +132,11 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
         raise HTTPException(status_code=403, detail="Cuenta deshabilitada.")
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Verificá tu email antes de ingresar.")
-    set_session_cookie(response, create_access_token(user.id))
-    return user
+    token = create_access_token(user.id)
+    set_session_cookie(response, token)  # web: cookie
+    out = AuthOut.model_validate(user)   # native: bearer
+    out.access_token = token
+    return out
 
 
 @router.post("/logout")

@@ -2,10 +2,14 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Native (Capacitor) builds must NOT include a service worker: inside a WebView
+// it serves stale cached assets and caches API calls. Build with CAP_BUILD=1.
+const isCapacitor = process.env.CAP_BUILD === '1'
+
 export default defineConfig({
   plugins: [
     vue(),
-    VitePWA({
+    ...(isCapacitor ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
@@ -34,7 +38,7 @@ export default defineConfig({
           },
         ],
       },
-    }),
+    })]),
   ],
   server: {
     proxy: {

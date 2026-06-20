@@ -19,7 +19,7 @@
 
     <div class="card actions">
       <router-link to="/capture" class="btn btn-primary">+ Escanear factura</router-link>
-      <router-link to="/siradig" class="btn btn-outline">Cargar en SiRADIG →</router-link>
+      <router-link v-if="!native" to="/siradig" class="btn btn-outline">Cargar en SiRADIG →</router-link>
     </div>
 
     <div class="card" v-if="warning">
@@ -47,8 +47,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { syncStatus, listInvoices, createInvite } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { isNative } from '../lib/native'
 
 const auth = useAuthStore()
+const native = isNative()
 const status = ref(null)
 const invoices = ref([])
 
