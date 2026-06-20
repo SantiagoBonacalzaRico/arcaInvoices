@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opción 5 · Co-piloto "smart paste" para SiRADIG</title>
+<style>
+  :root{--bg:#0f1220;--card:#1a1f33;--card2:#222842;--ink:#e8ecf6;--muted:#9aa4c2;
+        --line:#2c3354;--blue:#4f8cff;--green:#34c759;--amber:#ffb02e;--red:#ff5a5f;--violet:#9b8cff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:1040px;margin:0 auto;padding:2.4rem 1.4rem 4rem;}
+  .tag{display:inline-block;background:#2a3050;border:1px solid var(--line);color:var(--muted);
+       border-radius:999px;padding:.15rem .6rem;font-size:.72rem;margin-right:.4rem}
+  header h1{font-size:1.7rem;margin:.5rem 0 .35rem}
+  header p.sub{color:var(--muted);max-width:780px;margin:.2rem 0 0}
+  section{margin-top:2.1rem}
+  h2{font-size:1.12rem;border-left:3px solid var(--green);padding-left:.6rem;margin:0 0 .9rem}
+  p{margin:.4rem 0}
+  .muted{color:var(--muted)} .small{font-size:.85rem}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.5rem;margin:.6rem 0}
+  .step{flex:1;min-width:150px;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;font-size:.84rem}
+  .step b{display:block;color:#fff;margin-bottom:.15rem}
+  .arrow{display:flex;align-items:center;color:var(--green);font-weight:800;font-size:1.2rem}
+  ul.pc{list-style:none;padding:0;margin:.3rem 0 0}
+  ul.pc li{padding:.12rem 0 .12rem 1.3rem;position:relative;font-size:.92rem}
+  ul.pc li.p::before{content:"＋";position:absolute;left:0;color:var(--green);font-weight:700}
+  ul.pc li.c::before{content:"−";position:absolute;left:0;color:var(--red);font-weight:700}
+  ul.pc li.i::before{content:"•";position:absolute;left:.2rem;color:var(--blue);font-weight:700}
+  .grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:1rem}
+  @media(max-width:780px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.05rem 1.15rem}
+  /* phone mockup */
+  .phone{max-width:300px;margin:0 auto;background:#0b0e1c;border:1px solid var(--line);border-radius:24px;padding:.7rem;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  .phone .scr{background:#11152a;border-radius:16px;padding:.8rem;border:1px solid var(--line)}
+  .ptitle{font-size:.8rem;color:var(--muted);margin-bottom:.5rem}
+  .frow{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--line);
+        border-radius:10px;padding:.5rem .6rem;margin-bottom:.45rem}
+  .frow .lbl{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .frow .val{font-size:.92rem;color:#fff;font-weight:600}
+  .cbtn{background:var(--blue);color:#06122e;border:none;border-radius:8px;font-weight:800;font-size:.72rem;padding:.3rem .55rem}
+  .prog{height:6px;background:#0c1020;border-radius:6px;overflow:hidden;margin:.2rem 0 .6rem;border:1px solid var(--line)}
+  .prog>i{display:block;height:100%;width:42%;background:var(--green)}
+  .nextbtn{width:100%;background:var(--green);color:#06310f;border:none;border-radius:10px;font-weight:800;padding:.55rem;margin-top:.3rem}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.4rem;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:.55rem .7rem;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:var(--card2);color:#cdd6f0}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.35rem}
+  .g{background:var(--green)}.a{background:var(--amber)}.r{background:var(--red)}
+  .rec-box{background:linear-gradient(135deg,#16321f,#14253a);border:1px solid #2f6b43;border-radius:14px;padding:1.1rem 1.2rem}
+  .callout{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:12px;padding:.9rem 1rem}
+  code{background:#0c1020;border:1px solid var(--line);border-radius:5px;padding:.05rem .35rem;font-size:.85em}
+  footer{margin-top:2.2rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="tag">arcaInvoices</span><span class="tag">Opción 5</span><span class="tag">Co-piloto "smart paste"</span>
+    <h1>Co-piloto de carga: la app te guía, vos pegás</h1>
+    <p class="sub">Sin automatizar el formulario ni tocar tu Clave Fiscal. arcaInvoices te muestra las facturas
+    pendientes <b>una por una</b>, con botones de "copiar" por campo y un checklist que espeja los pasos del 572.
+    Vos pegás en SiRADIG y marcás como cargada. <b>Funciona en cualquier teléfono, sin instalar nada.</b></p>
+  </header>
+
+  <section>
+    <h2>Cómo se usa</h2>
+    <div class="flow">
+      <div class="step"><b>1 · Abrís las dos</b>arcaInvoices (PWA) y SiRADIG en el navegador del celu.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>2 · Copiás un campo</b>Tocás "copiar" el CUIT → vas a SiRADIG → pegás.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>3 · Repetís</b>Comprobante, fecha, importe, categoría. Campo por campo.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>4 · Marcás cargada</b>"Siguiente factura" y se actualiza el estado en la app.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>El gran punto a favor: corre en el celular (Android <i>y</i> iPhone)</h2>
+    <div class="callout">
+      <p style="margin:.1rem 0">A diferencia de la extensión (que en Android necesita Firefox), el co-piloto
+      <b>no depende de ninguna extensión ni navegador en particular</b>: es tu propia PWA + el portapapeles del
+      sistema + el sitio de SiRADIG. Por eso anda en <b>cualquier teléfono</b> — Chrome o Safari, Android o iOS —
+      sin instalar nada.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Para que pegar en el celu no sea un dolor</h2>
+    <div class="grid2">
+      <div class="card">
+        <ul class="pc">
+          <li class="p"><b>Vista enfocada</b> en una sola factura, con botones de copiar grandes (buen tap target).</li>
+          <li class="p"><b>"Copiar siguiente campo"</b>: cada toque copia el próximo dato en orden, así solo alternás app↔SiRADIG y pegás.</li>
+          <li class="p"><b>Progreso del mes</b> y "marcar cargada" que escribe el <code>sync_status</code> de vuelta.</li>
+          <li class="p"><b>Categoría ya mapeada</b> al tipo de deducción del 572, lista para elegir.</li>
+          <li class="c">Igual seguís alternando entre app y formulario: ayuda y ordena, pero no elimina el pegar.</li>
+        </ul>
+      </div>
+      <div class="phone">
+        <div class="scr">
+          <div class="ptitle">Cargando 5 de 12 · marzo</div>
+          <div class="prog"><i></i></div>
+          <div class="frow"><div><div class="lbl">CUIT emisor</div><div class="val">30-71099285-4</div></div><button class="cbtn">copiar</button></div>
+          <div class="frow"><div><div class="lbl">Comprobante</div><div class="val">0001-00000123</div></div><button class="cbtn">copiar</button></div>
+          <div class="frow"><div><div class="lbl">Fecha</div><div class="val">15/03/2026</div></div><button class="cbtn">copiar</button></div>
+          <div class="frow"><div><div class="lbl">Importe</div><div class="val">15000.00</div></div><button class="cbtn">copiar</button></div>
+          <div class="frow"><div><div class="lbl">Categoría</div><div class="val">Gastos Médicos</div></div><button class="cbtn">copiar</button></div>
+          <button class="nextbtn">✓ Cargada · Siguiente factura</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qué construimos</h2>
+    <ul class="pc">
+      <li class="i">Una <b>vista nueva</b> en la PWA Vue que ya tenés ("Cargar en SiRADIG").</li>
+      <li class="i">Reusa los datos existentes: <code>/api/export/summary</code> + el estado de cada factura.</li>
+      <li class="i">Clipboard API para "copiar", y un toggle por factura para <code>sync_status = synced</code>.</li>
+      <li class="i">Cero backend nuevo relevante; cero acoplamiento con el DOM de AFIP.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Pros y contras</h2>
+    <table>
+      <thead><tr><th>A favor</th><th>En contra</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>
+            <span class="dot g"></span>Anda en todo teléfono (Android + iPhone), sin instalar<br>
+            <span class="dot g"></span><b>No se rompe nunca</b>: no toca el formulario de AFIP<br>
+            <span class="dot g"></span>Riesgo legal/credenciales: nulo<br>
+            <span class="dot g"></span>Rapidísimo de construir (días)
+          </td>
+          <td>
+            <span class="dot a"></span>Seguís pegando vos<br>
+            <span class="dot a"></span>En el celu, alternar app↔SiRADIG suma toques<br>
+            <span class="dot a"></span>No es "mágico" como el auto-fill
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Esfuerzo</h2>
+    <p><span class="dot g"></span><b>Bajo — del orden de días.</b> Es casi todo frontend sobre lo que ya existe.
+    Ideal como primer entregable útil mientras se evalúa el auto-fill.</p>
+  </section>
+
+  <section>
+    <h2>Cómo combina con la extensión (lo mejor de los dos)</h2>
+    <div class="rec-box">
+      <p style="margin:.1rem 0 .5rem">No son excluyentes. La jugada fuerte:</p>
+      <ul class="pc" style="margin:0">
+        <li class="p"><b>Co-piloto (5)</b> como base universal: cubre <b>todos</b> los teléfonos y la compu, ya mismo, sin riesgo.</li>
+        <li class="p"><b>Extensión / WebExtension (1)</b> después, para quien quiera <b>auto-fill real</b> en compu (y en Android vía Firefox).</li>
+      </ul>
+      <p style="margin:.6rem 0 0;color:#bfe9cd"><b>Recomendación:</b> empezar por el co-piloto. Es el camino más
+      corto a "esto me sirve en el celular" y nunca queda inservible cuando AFIP cambia el formulario.</p>
+    </div>
+  </section>
+
+  <footer>arcaInvoices · Opción 5 en detalle · sin afiliación con ARCA/AFIP.</footer>
+</div>
+</body>
+</html>

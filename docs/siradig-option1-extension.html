@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opción 1 · Extensión de Chrome para auto-completar SiRADIG</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1f33; --card2:#222842; --ink:#e8ecf6; --muted:#9aa4c2;
+    --line:#2c3354; --blue:#4f8cff; --green:#34c759; --amber:#ffb02e; --red:#ff5a5f; --violet:#9b8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+       font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:1040px;margin:0 auto;padding:2.4rem 1.4rem 4rem;}
+  .tag{display:inline-block;background:#2a3050;border:1px solid var(--line);color:var(--muted);
+       border-radius:999px;padding:.15rem .6rem;font-size:.72rem;margin-right:.4rem}
+  header h1{font-size:1.7rem;margin:.5rem 0 .35rem}
+  header p.sub{color:var(--muted);max-width:780px;margin:.2rem 0 0}
+  section{margin-top:2.1rem}
+  h2{font-size:1.12rem;border-left:3px solid var(--blue);padding-left:.6rem;margin:0 0 .9rem}
+  h3{font-size:1rem;margin:1rem 0 .3rem;color:#dfe6fb}
+  p{margin:.4rem 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.05rem 1.15rem}
+  .muted{color:var(--muted)} .small{font-size:.85rem}
+  ul.pc{list-style:none;padding:0;margin:.3rem 0 0}
+  ul.pc li{padding:.12rem 0 .12rem 1.3rem;position:relative;font-size:.92rem}
+  ul.pc li.p::before{content:"＋";position:absolute;left:0;color:var(--green);font-weight:700}
+  ul.pc li.c::before{content:"−";position:absolute;left:0;color:var(--red);font-weight:700}
+  ul.pc li.i::before{content:"•";position:absolute;left:.2rem;color:var(--blue);font-weight:700}
+  /* flow */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.5rem;margin:.6rem 0}
+  .step{flex:1;min-width:150px;background:var(--card2);border:1px solid var(--line);border-radius:10px;
+        padding:.6rem .7rem;font-size:.84rem}
+  .step b{display:block;color:#fff;margin-bottom:.15rem}
+  .arrow{display:flex;align-items:center;color:var(--blue);font-weight:800;font-size:1.2rem}
+  /* arch boxes */
+  .arch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}
+  @media(max-width:760px){.arch{grid-template-columns:1fr}}
+  .box{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:.7rem .8rem}
+  .box h4{margin:0 0 .2rem;font-size:.92rem;color:#fff}
+  .box span{font-size:.8rem;color:var(--muted)}
+  .pill{display:inline-block;font-size:.68rem;font-weight:700;border-radius:6px;padding:.12rem .4rem;margin-left:.3rem}
+  .pill.rec{background:rgba(52,199,89,.18);color:#9af0b6;border:1px solid rgba(52,199,89,.4)}
+  .pill.warn{background:rgba(255,176,46,.16);color:#ffd28a;border:1px solid rgba(255,176,46,.35)}
+  pre{background:#0b0e1c;border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;overflow:auto;
+      font-size:.8rem;line-height:1.5;color:#cdd6f0}
+  code{background:#0c1020;border:1px solid var(--line);border-radius:5px;padding:.05rem .35rem;font-size:.85em}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.4rem;background:var(--card);
+        border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:.55rem .7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--card2);color:#cdd6f0}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.35rem}
+  .g{background:var(--green)}.a{background:var(--amber)}.r{background:var(--red)}
+  .callout{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--amber);
+           border-radius:12px;padding:.9rem 1rem}
+  .rec-box{background:linear-gradient(135deg,#16321f,#14253a);border:1px solid #2f6b43;border-radius:14px;padding:1.1rem 1.2rem}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:.4rem 0 0}
+  .steps li{counter-increment:s;position:relative;padding:.3rem 0 .3rem 2rem}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:.25rem;width:1.4rem;height:1.4rem;
+        background:var(--blue);color:#06122e;border-radius:50%;font-weight:800;font-size:.78rem;
+        display:flex;align-items:center;justify-content:center}
+  footer{margin-top:2.2rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="tag">arcaInvoices</span><span class="tag">Opción 1</span><span class="tag">Extensión Chrome (MV3)</span>
+    <h1>Auto-completar el F.572 con una extensión de Chrome</h1>
+    <p class="sub">Vos te logueás a SiRADIG con tu Clave Fiscal como siempre. La extensión, parada sobre esa página
+    ya autenticada, lee tus facturas desde arcaInvoices y <b>escribe los campos del formulario por vos</b>, una
+    deducción a la vez, dejándote revisar y confirmar. Nunca toca tu Clave Fiscal.</p>
+  </header>
+
+  <section>
+    <h2>Cómo se siente al usarla</h2>
+    <div class="flow">
+      <div class="step"><b>1 · Login</b>Entrás a SiRADIG con Clave Fiscal (vos, a mano; 2FA incluido).</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>2 · Panel</b>La extensión muestra las facturas pendientes de arcaInvoices.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>3 · "Cargar siguiente"</b>Rellena CUIT, comprobante, fecha, importe y categoría.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>4 · Revisás y confirmás</b>Vos apretás "Guardar" de AFIP. Se marca como cargada.</div>
+    </div>
+    <p class="small muted">El humano siempre da el último clic de guardar: mantiene el control, evita cargar datos
+    errados y nos deja del lado seguro de los Términos de AFIP.</p>
+  </section>
+
+  <section>
+    <h2>Arquitectura (Manifest V3)</h2>
+    <div class="arch">
+      <div class="box"><h4>Content script</h4><span>Inyectado en las páginas <code>572web</code>. Conoce el mapa del DOM y escribe los campos disparando los eventos correctos.</span></div>
+      <div class="box"><h4>Service worker</h4><span>Trae las facturas desde la API de arcaInvoices, mantiene la cola y mensajea con el panel.</span></div>
+      <div class="box"><h4>Side panel / popup</h4><span>Lista de pendientes, botones "cargar / saltar / marcar cargada", progreso del mes.</span></div>
+    </div>
+    <p class="small muted" style="margin-top:.6rem">Permisos mínimos: <code>host_permissions</code> acotados a los dominios del 572 de AFIP y al dominio de tu app. Nada de <code>&lt;all_urls&gt;</code>.</p>
+  </section>
+
+  <section>
+    <h2>El puente de datos · cómo llegan las facturas a la extensión</h2>
+    <p class="small">La extensión necesita leer <code>/api/export/summary</code> de arcaInvoices. Hay tres formas; la cookie de sesión es <code>SameSite=Lax</code>, así que un <code>fetch</code> cruzado directo no la manda. Opciones:</p>
+    <table>
+      <thead><tr><th>Enfoque</th><th>Cómo</th><th>Veredicto</th></tr></thead>
+      <tbody>
+        <tr><td><b>Token de conexión</b><span class="pill rec">recomendado</span></td><td>La app genera un token de API de alcance limitado; lo pegás una vez en la extensión y queda guardado.</td><td><span class="dot g"></span>Simple, seguro, sin tocar cookies</td></tr>
+        <tr><td>Cookie cross-site</td><td>Cambiar la cookie a <code>SameSite=None; Secure</code> + CORS para el origen de la extensión.</td><td><span class="dot a"></span>Funciona, pero afloja la cookie</td></tr>
+        <tr><td>Leer desde la pestaña</td><td>El usuario abre arcaInvoices en otra pestaña; la extensión lee los datos vía mensajería.</td><td><span class="dot a"></span>Más fricción de uso</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>La parte difícil · el auto-fill sobre un formulario legacy</h2>
+    <div class="callout">
+      <p style="margin:.1rem 0">El 572web es un formulario viejo con <b>postbacks</b> (ASP/JSF): el alta de una deducción es un
+      asistente de varios pasos y muchos campos recargan parte de la página al cambiar. Por eso <b>no alcanza con setear
+      <code>input.value</code></b>: hay que disparar los eventos <code>input/change/blur</code>, esperar a que el postback
+      asiente, y recién seguir. Es la parte frágil y la que más mantenimiento pide.</p>
+    </div>
+    <pre>// Boceto del content script (simplificado)
+async function fillDeduccion(inv) {
+  setField('#cuitEmisor', inv.cuit);          // set value + dispatch input/change
+  await settle();                              // esperar postback/AJAX
+  setField('#nroComprobante', inv.invoice_number);
+  setField('#fecha', inv.date);
+  setField('#importe', inv.amount);
+  selectDeduccion(mapCategoria(inv.category)); // arcaInvoices → tipo SiRADIG
+  await settle();
+  highlightConfirm();   // NO hace submit: resalta el botón "Guardar" de AFIP
+}</pre>
+    <ul class="pc">
+      <li class="p">Seleccionar campos por atributos estables y centralizar el "mapa del DOM" en un solo módulo versionado.</li>
+      <li class="p">Tolerar campos ausentes y nunca hacer el submit final automático → menos riesgo de datos malos.</li>
+      <li class="c">Si AFIP cambia el formulario, los selectores se rompen y hay que actualizar la extensión.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Seguridad</h2>
+    <ul class="pc">
+      <li class="p"><b>Cero Clave Fiscal:</b> la extensión nunca ve tu contraseña; actuás sobre una página que ya autenticaste vos.</li>
+      <li class="p"><b>Permisos acotados:</b> solo los dominios del 572 + el de tu app.</li>
+      <li class="p"><b>Datos efímeros:</b> la cola de facturas vive en memoria/sesión; el token de conexión es de alcance limitado y revocable.</li>
+      <li class="i">Mantener al humano en el guardado final también ayuda a la postura frente a los Términos de AFIP.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Distribución y mantenimiento</h2>
+    <div class="arch">
+      <div class="box"><h4>Chrome Web Store <span class="pill rec">multi-usuario</span></h4><span>Auto-update y fácil para los usuarios que invites. Esperá una revisión por los permisos sobre dominios de AFIP.</span></div>
+      <div class="box"><h4>Cargar desempaquetada</h4><span>Para vos/desarrollo: sin revisión, pero cada uno la instala a mano.</span></div>
+      <div class="box"><h4>CRX self-hosted</h4><span>Intermedio; control total de la actualización.</span></div>
+    </div>
+    <p class="small muted" style="margin-top:.6rem"><b>Mantenimiento:</b> está acoplada al DOM de AFIP. Mitigación: mapa del DOM centralizado y versionado, y el co-piloto "smart paste" como red de seguridad si algo se rompe a mitad de mes.</p>
+  </section>
+
+  <section>
+    <h2>Plan por fases y esfuerzo</h2>
+    <table>
+      <thead><tr><th>Fase</th><th>Qué incluye</th><th>Esfuerzo</th></tr></thead>
+      <tbody>
+        <tr><td><b>A · Spike</b></td><td>Capturar el DOM real del asistente (sesión logueada) y rellenar <b>una</b> deducción de punta a punta, resolviendo los postbacks. Valida factibilidad.</td><td><span class="dot g"></span>~1–2 días</td></tr>
+        <tr><td><b>B · MVP</b></td><td>Puente de datos (token + <code>/export/summary</code>), cola en el panel, mapeo categoría→tipo de deducción, auto-fill de todas las facturas.</td><td><span class="dot a"></span>~1 semana</td></tr>
+        <tr><td><b>C · Pulido</b></td><td>Progreso, "saltar / marcar cargada" que escribe el <code>sync_status</code> de vuelta en arcaInvoices, empaquetado y envío a la Web Store.</td><td><span class="dot a"></span>~2–3 semanas (incl. revisión)</td></tr>
+      </tbody>
+    </table>
+    <p class="small muted">Estimaciones aproximadas; la incógnita más grande es cuánto "pelea" el formulario con los postbacks, y eso lo despeja la Fase A.</p>
+  </section>
+
+  <section>
+    <h2>Riesgos y mitigaciones</h2>
+    <ul class="pc">
+      <li class="i"><b>Cambios de UI de AFIP →</b> mapa del DOM centralizado + versionado; fallback a smart-paste.</li>
+      <li class="i"><b>Términos de AFIP →</b> login humano, sin credenciales guardadas, sin submit automático.</li>
+      <li class="i"><b>Cookie/CORS →</b> usar token de conexión en vez de cookie cruzada.</li>
+      <li class="i"><b>Revisión de la Web Store →</b> justificar los <code>host_permissions</code>; mientras tanto, "cargar desempaquetada".</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Recomendación + qué necesito definir</h2>
+    <div class="rec-box">
+      <p style="margin:.1rem 0 .6rem">Arrancaría por la <b>Fase A (spike)</b>: es barata y nos dice de inmediato si el formulario se deja
+      automatizar bien. Si sale, seguimos al MVP.</p>
+      <p style="margin:0;color:#bfe9cd">Decisiones para avanzar:</p>
+      <ol class="steps" style="margin-top:.4rem">
+        <li><b>Puente de datos:</b> ¿token de conexión (recomendado), cookie cross-site, o leer desde la pestaña?</li>
+        <li><b>Alcance del auto-fill:</b> ¿solo rellenar y que vos avances los pasos, o que también avance el asistente?</li>
+        <li><b>Distribución:</b> ¿solo para vos (desempaquetada) o multi-usuario (Web Store)?</li>
+        <li><b>¿Arrancamos por el spike (Fase A)?</b> Para eso necesito acceso a una sesión real del 572 para mapear el DOM.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    arcaInvoices · Opción 1 en detalle · sin afiliación con ARCA/AFIP. El detalle exacto de campos y operaciones
+    del alta de deducciones está en el <i>Manual SiRADIG v1.19 (MAR 2026)</i>.
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>arcaInvoices — Opciones para automatizar la carga en SiRADIG (F.572)</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1f33; --card2:#222842; --ink:#e8ecf6; --muted:#9aa4c2;
+    --line:#2c3354; --blue:#4f8cff; --green:#34c759; --amber:#ffb02e; --red:#ff5a5f; --violet:#9b8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c0f1c,#0f1220 240px);color:var(--ink);
+       font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:2.4rem 1.4rem 4rem;}
+  header h1{font-size:1.8rem;margin:0 0 .35rem;letter-spacing:.2px}
+  header p.sub{color:var(--muted);margin:.2rem 0 0;max-width:760px}
+  .tag{display:inline-block;background:#2a3050;border:1px solid var(--line);color:var(--muted);
+       border-radius:999px;padding:.15rem .6rem;font-size:.72rem;margin-right:.4rem}
+  section{margin-top:2.2rem}
+  h2{font-size:1.15rem;border-left:3px solid var(--blue);padding-left:.6rem;margin:0 0 1rem}
+  .callout{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--amber);
+           border-radius:12px;padding:1rem 1.1rem;color:#e9edf8}
+  .callout b{color:#fff}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:780px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.15rem;
+        position:relative;overflow:hidden}
+  .card h3{margin:.1rem 0 .2rem;font-size:1.06rem}
+  .card .role{color:var(--muted);font-size:.82rem;margin-bottom:.7rem}
+  .badges{display:flex;flex-wrap:wrap;gap:.35rem;margin:.2rem 0 .8rem}
+  .b{font-size:.7rem;font-weight:700;border-radius:6px;padding:.16rem .45rem;border:1px solid transparent}
+  .b.eff{background:rgba(79,140,255,.14);color:#9cc0ff;border-color:rgba(79,140,255,.3)}
+  .b.risk-low{background:rgba(52,199,89,.14);color:#7ce6a0;border-color:rgba(52,199,89,.3)}
+  .b.risk-med{background:rgba(255,176,46,.14);color:#ffd28a;border-color:rgba(255,176,46,.3)}
+  .b.risk-high{background:rgba(255,90,95,.15);color:#ff9b9e;border-color:rgba(255,90,95,.35)}
+  .b.rec{background:rgba(52,199,89,.18);color:#9af0b6;border-color:rgba(52,199,89,.45)}
+  ul.pc{list-style:none;padding:0;margin:.4rem 0 0}
+  ul.pc li{padding:.12rem 0 .12rem 1.3rem;position:relative;font-size:.9rem}
+  ul.pc li.p::before{content:"＋";position:absolute;left:0;color:var(--green);font-weight:700}
+  ul.pc li.c::before{content:"−";position:absolute;left:0;color:var(--red);font-weight:700}
+  .ribbon{position:absolute;top:12px;right:-34px;transform:rotate(45deg);background:var(--green);
+          color:#07310f;font-weight:800;font-size:.66rem;padding:.2rem 2.4rem;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:.4rem;background:var(--card);
+        border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:.6rem .7rem;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:var(--card2);color:#cdd6f0;font-weight:700}
+  td.opt{font-weight:700;color:#fff}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+  .g{background:var(--green)}.a{background:var(--amber)}.r{background:var(--red)}
+  .rec-box{background:linear-gradient(135deg,#16321f,#14253a);border:1px solid #2f6b43;border-radius:14px;
+           padding:1.2rem 1.3rem;margin-top:1rem}
+  .rec-box h3{margin:.1rem 0 .5rem;color:#aef0c4}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:.6rem 0 0}
+  .steps li{counter-increment:s;position:relative;padding:.35rem 0 .35rem 2rem}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:.3rem;width:1.4rem;height:1.4rem;
+        background:var(--blue);color:#06122e;border-radius:50%;font-weight:800;font-size:.78rem;
+        display:flex;align-items:center;justify-content:center}
+  code{background:#0c1020;border:1px solid var(--line);border-radius:5px;padding:.05rem .35rem;font-size:.85em}
+  footer{margin-top:2.4rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+  a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="tag">arcaInvoices</span><span class="tag">Investigación</span><span class="tag">Junio 2026</span>
+    <h1>Automatizar la carga de facturas en SiRADIG (F.572 web)</h1>
+    <p class="sub">ARCA/AFIP no expone una API pública para que los trabajadores carguen deducciones. Esto resume
+    las formas reales de <b>automatizar, total o parcialmente, el llenado del formulario 572</b>, con sus
+    ventajas, riesgos y esfuerzo. Elegí una y la implementamos.</p>
+  </header>
+
+  <section>
+    <h2>Restricciones que mandan en la decisión</h2>
+    <div class="callout">
+      <ul class="pc" style="margin:0">
+        <li class="c"><b>Sin API.</b> Solo existe el formulario web (legacy <code>572web</code>, <code>.asp/.aspx</code>). Hay que interactuar con la UI.</li>
+        <li class="c"><b>Login con Clave Fiscal nivel 2+.</b> Guardar/automatizar la Clave Fiscal es un riesgo serio de seguridad y casi seguro viola los Términos de AFIP. → conviene que <b>el humano haga el login</b>.</li>
+        <li class="c"><b>2FA / CAPTCHA posibles.</b> Cualquier bot 100% desatendido se rompe ahí. Mantener a la persona "en el loop" lo evita.</li>
+        <li class="c"><b>La UI cambia.</b> Toda solución acoplada al DOM necesita mantenimiento cuando AFIP retoca el formulario.</li>
+        <li class="p"><b>Ya tenemos los datos.</b> arcaInvoices expone las facturas (API <code>/api/export/summary</code>), así que la automatización solo debe "puentear" datos → campos del 572.</li>
+        <li class="c"><b>Ventana mensual días 1–7.</b> La carga es una tarea recurrente y corta; importa que sea rápida y confiable, no necesariamente invisible.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Las opciones</h2>
+    <div class="grid">
+
+      <!-- 1 -->
+      <div class="card">
+        <div class="ribbon">RECOMENDADA</div>
+        <h3>1 · Extensión de Chrome (auto-completar asistido)</h3>
+        <div class="role">Vos te logueás a mano en SiRADIG; la extensión rellena el formulario con los datos de arcaInvoices.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: medio</span><span class="b risk-low">Riesgo legal: bajo</span><span class="b risk-low">Seguridad: alta</span><span class="b rec">Sweet spot</span></div>
+        <ul class="pc">
+          <li class="p">No guarda la Clave Fiscal — el humano hace login y 2FA.</li>
+          <li class="p">Automatiza lo tedioso: tipeo campo por campo, una factura por clic o en lote.</li>
+          <li class="p">Funciona para vos y para los usuarios invitados (multi-tenant).</li>
+          <li class="c">Hay que mapear el DOM del wizard del 572 y mantenerlo ante cambios.</li>
+          <li class="c">Distribución: Chrome Web Store (revisión) o "cargar desempaquetada".</li>
+        </ul>
+      </div>
+
+      <!-- 2 -->
+      <div class="card">
+        <h3>2 · Userscript (Tampermonkey / Violentmonkey)</h3>
+        <div class="role">Primo liviano de la extensión: un script que corre sobre la página del 572 ya abierta.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: bajo-medio</span><span class="b risk-low">Riesgo legal: bajo</span><span class="b risk-low">Seguridad: alta</span></div>
+        <ul class="pc">
+          <li class="p">Mismo modelo seguro (login manual), pero sin empaquetar una extensión.</li>
+          <li class="p">Se actualiza solo: publicás un <code>.user.js</code> versionado.</li>
+          <li class="c">Requiere instalar Tampermonkey.</li>
+          <li class="c">Traer los datos desde la app implica CORS o pegar un "bloque de datos".</li>
+        </ul>
+      </div>
+
+      <!-- 3 -->
+      <div class="card">
+        <h3>3 · "Explorador lite" con interacción</h3>
+        <div class="role">Un mini-navegador controlado que abre SiRADIG, te deja loguear, y un overlay maneja el formulario.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: alto</span><span class="b risk-med">Riesgo legal: medio</span><span class="b risk-med">Seguridad: media</span></div>
+        <ul class="pc">
+          <li class="p">Máximo control: orquesta pasos, pausa para login/2FA/CAPTCHA, muestra progreso.</li>
+          <li class="p">Experiencia "guiada de punta a punta" en una sola ventana.</li>
+          <li class="c">Es, en esencia, construir y mantener un navegador a medida.</li>
+          <li class="c">Distribución como app de escritorio; más pesado de mantener.</li>
+        </ul>
+        <div style="margin-top:.5rem;font-size:.82rem;color:var(--muted)">
+          Sabores: <b>3a</b> Electron + webview &nbsp;·&nbsp; <b>3b</b> Playwright headful con perfil persistente
+          &nbsp;·&nbsp; <b>3c</b> Adjuntarse por CDP a tu Chrome real ya logueado.
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <div class="card">
+        <h3>4 · Bot headless 100% desatendido</h3>
+        <div class="role">Playwright/Selenium se loguea con Clave Fiscal guardada y carga todo sin intervención.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: alto</span><span class="b risk-high">Riesgo legal: alto</span><span class="b risk-high">Seguridad: baja</span></div>
+        <ul class="pc">
+          <li class="p">Cero esfuerzo del usuario una vez configurado.</li>
+          <li class="c">Hay que <b>almacenar la Clave Fiscal</b>: responsabilidad y riesgo grandes.</li>
+          <li class="c">Se rompe con 2FA / CAPTCHA; muy probablemente contra los Términos de AFIP.</li>
+          <li class="c">Frágil ante cualquier cambio de UI. <b>No recomendado.</b></li>
+        </ul>
+      </div>
+
+      <!-- 5 -->
+      <div class="card">
+        <h3>5 · Co-piloto "smart paste" (sin automatización)</h3>
+        <div class="role">La app te guía factura por factura con botones de copiar y un checklist espejo del 572.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: bajo</span><span class="b risk-low">Riesgo legal: nulo</span><span class="b risk-low">Seguridad: alta</span></div>
+        <ul class="pc">
+          <li class="p">Cero acoplamiento con AFIP: <b>funciona para siempre</b>, no se rompe.</li>
+          <li class="p">Rapidísimo de construir; buen MVP / plan B.</li>
+          <li class="c">Seguís pegando vos: ayuda, pero no elimina el trabajo manual.</li>
+        </ul>
+      </div>
+
+      <!-- 6 -->
+      <div class="card">
+        <h3>6 · Macro de teclado / portapapeles (OS)</h3>
+        <div class="role">Herramienta tipo AutoHotkey/Keyboard Maestro que "tipea" en los campos enfocados.</div>
+        <div class="badges"><span class="b eff">Esfuerzo: bajo</span><span class="b risk-med">Riesgo legal: bajo</span><span class="b risk-high">Robustez: baja</span></div>
+        <ul class="pc">
+          <li class="p">No toca el DOM ni el login; "escribe" como una persona.</li>
+          <li class="c">Muy frágil: depende del orden de tabulación y de la pantalla exacta.</li>
+          <li class="c">Difícil de distribuir a usuarios invitados. Solo como truco personal.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Comparación rápida</h2>
+    <table>
+      <thead><tr>
+        <th>Opción</th><th>Login</th><th>Esfuerzo build</th><th>Robustez</th>
+        <th>Riesgo ToS</th><th>Sirve a invitados</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="opt">1 · Extensión Chrome</td><td>humano</td><td><span class="dot a"></span>Medio</td><td><span class="dot a"></span>Media</td><td><span class="dot g"></span>Bajo</td><td><span class="dot g"></span>Sí</td></tr>
+        <tr><td class="opt">2 · Userscript</td><td>humano</td><td><span class="dot g"></span>Bajo-Medio</td><td><span class="dot a"></span>Media</td><td><span class="dot g"></span>Bajo</td><td><span class="dot a"></span>Con fricción</td></tr>
+        <tr><td class="opt">3 · Explorador lite</td><td>humano</td><td><span class="dot r"></span>Alto</td><td><span class="dot a"></span>Media</td><td><span class="dot a"></span>Medio</td><td><span class="dot a"></span>App de escritorio</td></tr>
+        <tr><td class="opt">4 · Bot headless</td><td><b>guardada ⚠</b></td><td><span class="dot r"></span>Alto</td><td><span class="dot r"></span>Baja</td><td><span class="dot r"></span>Alto</td><td><span class="dot r"></span>No</td></tr>
+        <tr><td class="opt">5 · Smart paste</td><td>humano</td><td><span class="dot g"></span>Bajo</td><td><span class="dot g"></span>Alta</td><td><span class="dot g"></span>Nulo</td><td><span class="dot g"></span>Sí</td></tr>
+        <tr><td class="opt">6 · Macro OS</td><td>humano</td><td><span class="dot g"></span>Bajo</td><td><span class="dot r"></span>Baja</td><td><span class="dot g"></span>Bajo</td><td><span class="dot r"></span>No</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Recomendación</h2>
+    <div class="rec-box">
+      <h3>Empezar por el co-piloto (5), evolucionar a la extensión (1)</h3>
+      <p style="margin:.2rem 0 .5rem">
+        El <b>smart paste (5)</b> es un MVP de bajo riesgo que ya te ahorra errores y tiempo esta misma semana, y
+        nunca se "rompe". En paralelo, la <b>extensión de Chrome (1)</b> es el verdadero sweet spot: automatiza el
+        llenado real manteniendo el login en manos del humano — segura respecto de la Clave Fiscal, defendible ante
+        los Términos de AFIP, y útil también para los usuarios que invites. El <b>explorador lite (3)</b> queda como
+        plan de máxima si querés una experiencia guiada en una sola ventana, pero es la opción más cara de construir
+        y mantener.
+      </p>
+      <p style="margin:.2rem 0 0;color:#bfe9cd"><b>Decisión que necesito de vos:</b> ¿arrancamos con el co-piloto, vamos directo a la extensión, o querés que prototipe el explorador lite?</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Próximo paso técnico (común a 1, 2 y 3)</h2>
+    <ol class="steps">
+      <li>Capturar la estructura real del wizard del 572 con una sesión logueada (campos, IDs, pasos del alta de una deducción).</li>
+      <li>Definir el "puente de datos": leer las facturas desde <code>/api/export/summary</code> y mapearlas a cada campo (CUIT, comprobante, fecha, importe, categoría de deducción).</li>
+      <li>Construir el auto-fill + un control de "siguiente factura / saltar / marcar cargada" que actualice el estado en arcaInvoices.</li>
+    </ol>
+    <p style="color:var(--muted);font-size:.84rem">Nota: el mapeo del DOM exige inspeccionar el formulario en vivo (requiere login con Clave Fiscal). El detalle exacto de campos y operaciones está en el <i>Manual SiRADIG v1.19 (MAR 2026)</i>.</p>
+  </section>
+
+  <footer>
+    Generado para arcaInvoices · investigación de automatización SiRADIG/F.572 · sin afiliación con ARCA/AFIP.
+    Fuentes: portal SiRADIG de ARCA y documentación oficial del F.572 web.
+  </footer>
+</div>
+</body>
+</html>
