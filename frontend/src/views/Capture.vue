@@ -20,7 +20,7 @@
       <input ref="galleryInput" type="file" accept="image/*" multiple            hidden @change="onGalleryFiles" />
 
       <div class="pick-buttons">
-        <button class="btn btn-outline" @click.stop="$refs.cameraInput.click()">📷 Sacar foto</button>
+        <button class="btn btn-outline" @click.stop="native ? takePhoto() : $refs.cameraInput.click()">📷 Sacar foto</button>
         <button class="btn btn-outline" @click.stop="$refs.galleryInput.click()">🖼 Elegir archivos</button>
       </div>
 
@@ -163,6 +163,32 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { detectCodes, scanInvoice, saveImage, createInvoice, recordCorrection, listCuits } from '../api'
+import { isNative } from '../lib/native'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+
+const native = isNative()
+
+// Native camera capture (Capacitor). Returns a File fed into the same scan flow.
+async function takePhoto() {
+  try {
+    const photo = await Camera.getPhoto({
+      quality: 80,
+      resultType: CameraResultType.Uri,
+      source: CameraSource.Camera,
+      allowEditing: false,
+    })
+    if (!photo?.webPath) return
+    const blob = await (await fetch(photo.webPath)).blob()
+    const ext = photo.format || 'jpeg'
+    const file = new File([blob], `factura-${Date.now()}.${ext}`, {
+      type: blob.type || `image/${ext}`,
+    })
+    _addFiles([file])
+  } catch (e) {
+    const msg = e?.message || ''
+    if (msg && !/cancel/i.test(msg)) alert('No se pudo usar la cámara: ' + msg)
+  }
+}
 
 const step = ref('pick')       // pick | scanning | confirm | done
 const previewUrls = ref([])    // blob URL per image
