@@ -15,13 +15,15 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..models import EmailVerification, InviteCode, User
+from ..models import EmailVerification, InviteCode, PasswordReset, User
 from ..schemas import (
     AuthOut,
+    ForgotPasswordRequest,
     InviteCreateRequest,
     InviteOut,
     LoginRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     UserOut,
 )
 from ..auth.security import (
@@ -34,7 +36,7 @@ from ..auth.security import (
     set_session_cookie,
     verify_password,
 )
-from ..auth.emails import send_verification_email
+from ..auth.emails import send_password_reset_email, send_verification_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -137,6 +139,48 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     out = AuthOut.model_validate(user)   # native: bearer
     out.access_token = token
     return out
+
+
+# ── Password reset ────────────────────────────────────────────────────────────
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Start a password reset. Always returns the same response whether or not the
+    email exists, so it can't be used to probe which addresses are registered.
+    """
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user and user.is_active:
+        # Invalidate any outstanding tokens for this user, then issue a fresh one.
+        db.query(PasswordReset).filter(PasswordReset.user_id == user.id).delete()
+        token = new_token()
+        db.add(PasswordReset(
+            token=token,
+            user_id=user.id,
+            expires_at=datetime.utcnow() + timedelta(hours=2),
+        ))
+        db.commit()
+        await send_password_reset_email(user.email, token)
+
+    return {"status": "ok"}
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    rec = db.query(PasswordReset).filter(PasswordReset.token == payload.token).first()
+    if not rec or rec.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Enlace de restablecimiento inválido o expirado.")
+    user = db.query(User).filter(User.id == rec.user_id).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Usuario no encontrado.")
+
+    user.password_hash = hash_password(payload.password)
+    # Reaching this link proves control of the email, so the account is verified.
+    user.is_verified = True
+    # Burn this token and any siblings.
+    db.query(PasswordReset).filter(PasswordReset.user_id == user.id).delete()
+    db.commit()
+    return {"status": "reset"}
 
 
 @router.post("/logout")

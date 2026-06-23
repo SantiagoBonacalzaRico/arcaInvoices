@@ -45,6 +45,15 @@ class EmailVerification(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+
+    token = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 

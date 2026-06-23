@@ -39,6 +39,8 @@ export const login = (identifier, password) => api.post('/auth/login', { identif
 export const logout = () => api.post('/auth/logout')
 export const fetchMe = () => api.get('/auth/me')
 export const verifyEmail = (token) => api.get('/auth/verify', { params: { token } })
+export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
+export const resetPassword = (token, password) => api.post('/auth/reset-password', { token, password })
 export const createInvite = (data = {}) => api.post('/auth/invites', data)
 export const googleLoginUrl = '/api/auth/google/login'
 

@@ -23,6 +23,10 @@ def verification_link(token: str) -> str:
     return f"{settings.app_base_url.rstrip('/')}/verify?token={token}"
 
 
+def reset_link(token: str) -> str:
+    return f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
+
+
 async def send_verification_email(to_email: str, token: str) -> None:
     link = verification_link(token)
     logger.info("Email verification link for %s: %s", to_email, link)
@@ -45,6 +49,37 @@ async def send_verification_email(to_email: str, token: str) -> None:
         "Si no creaste esta cuenta, ignorá este mensaje.\n"
     )
     msg.attach(MIMEText(body, "plain"))
+    await _send(msg, to_email)
+
+
+async def send_password_reset_email(to_email: str, token: str) -> None:
+    link = reset_link(token)
+    logger.info("Password reset link for %s: %s", to_email, link)
+
+    if not settings.system_smtp_host:
+        logger.warning(
+            "SYSTEM_SMTP_HOST not configured — password reset email not sent. "
+            "Use the link logged above to reset locally."
+        )
+        return
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Restablecé tu contraseña — arcaInvoices"
+    msg["From"] = settings.system_smtp_from or settings.system_smtp_user
+    msg["To"] = to_email
+    body = (
+        "¡Hola!\n\n"
+        "Recibimos un pedido para restablecer la contraseña de tu cuenta de "
+        "arcaInvoices. Hacé clic en el siguiente enlace para elegir una nueva "
+        "contraseña (el enlace vence en 2 horas):\n\n"
+        f"{link}\n\n"
+        "Si no pediste este cambio, ignorá este mensaje: tu contraseña sigue igual.\n"
+    )
+    msg.attach(MIMEText(body, "plain"))
+    await _send(msg, to_email)
+
+
+async def _send(msg: MIMEMultipart, to_email: str) -> None:
     try:
         await aiosmtplib.send(
             msg,
@@ -54,5 +89,5 @@ async def send_verification_email(to_email: str, token: str) -> None:
             password=settings.system_smtp_password or None,
             start_tls=True,
         )
-    except Exception as exc:  # never block registration on email failure
-        logger.error("Failed to send verification email to %s: %s", to_email, exc)
+    except Exception as exc:  # never block the request on email failure
+        logger.error("Failed to send email to %s: %s", to_email, exc)

@@ -50,6 +50,10 @@ async function submit() {
         </button>
       </form>
 
+      <p class="auth-forgot">
+        <router-link to="/forgot-password">¿Olvidaste tu contraseña?</router-link>
+      </p>
+
       <div class="auth-divider"><span>o</span></div>
 
       <a class="btn btn-outline auth-btn" :href="googleLoginUrl">Ingresar con Google</a>
@@ -73,4 +77,5 @@ async function submit() {
 .auth-divider::before, .auth-divider::after { content: ''; flex: 1; border-bottom: 1px solid #e0e0e0; }
 .auth-divider span { padding: 0 .75rem; }
 .auth-foot { text-align: center; margin-top: 1.25rem; font-size: .85rem; color: #555; }
+.auth-forgot { text-align: center; margin: .85rem 0 0; font-size: .85rem; }
 </style>
