@@ -161,16 +161,31 @@ def _extract_cuit(text: str) -> OcrField:
         re.IGNORECASE,
     )
     _VALID_CUIT_TYPES = {"20", "23", "24", "27", "30", "33", "34"}
+
+    def _valid_window(digits: str) -> Optional[str]:
+        for start in range(max(1, len(digits) - 10)):
+            window = digits[start: start + 11]
+            if (len(window) == 11
+                    and window[:2] in _VALID_CUIT_TYPES
+                    and _valid_cuit_digits(window)):
+                return window
+        return None
+
     for lm in _label_cuit.finditer(text):
         segment = lm.group(1)
+        # Clean read: the label is present and the segment already holds valid
+        # CUIT digits with no OCR look-alike substitution. As reliable as the
+        # Pass 1 clean-label path, so it earns the same high confidence.
+        clean = _valid_window(re.sub(r"\D", "", segment))
+        if clean:
+            return OcrField(value=P.normalize_cuit(clean), confidence=0.97)
+        # Recovery read: convert letter-for-digit misreads ('O'→'0', 'B'→'8'/'7',
+        # 'l'→'1', …) then re-check. Lossier, so a lower confidence.
         for alt in (False, True):
             digits = re.sub(r"\D", "", _normalize_ocr_digits(segment, alt=alt))
-            for start in range(max(1, len(digits) - 10)):
-                window = digits[start: start + 11]
-                if (len(window) == 11
-                        and window[:2] in _VALID_CUIT_TYPES
-                        and _valid_cuit_digits(window)):
-                    return OcrField(value=P.normalize_cuit(window), confidence=0.85)
+            window = _valid_window(digits)
+            if window:
+                return OcrField(value=P.normalize_cuit(window), confidence=0.85)
 
     # Pass 1 — labelled (clean digits — keeps existing fast path for well-OCR'd docs)
     m = P.CUIT_LABEL.search(text)
@@ -317,10 +332,21 @@ def _extract_invoice_number(text: str) -> OcrField:
     # Pass 0 — split "P.V. Nro." + "Nro T." layout (Makro & fiscal-controller
     # tickets).  Both parts are explicitly labelled, so this is high-confidence
     # and runs first.  "P.V. Nro.:1776  Nro T. 00119564" → 01776-00119564.
-    m = P.INVOICE_PV_NROT.search(clean_norm) or P.INVOICE_PV_NROT.search(clean)
-    if m:
-        pv  = m.group(1).zfill(5)[:5]
-        num = m.group(2).zfill(8)[:8]
+    # The same number can be read by several OCR passes (header, footer, CLAHE),
+    # some of which truncate a digit; prefer the match with a complete 8-digit
+    # comprobante number over a shorter (truncated) one.
+    best_pv_nrot: Optional[re.Match] = None
+    for source in (clean_norm, clean):
+        for m in P.INVOICE_PV_NROT.finditer(source):
+            if best_pv_nrot is None or len(m.group(2)) > len(best_pv_nrot.group(2)):
+                best_pv_nrot = m
+            if len(m.group(2)) >= 8:
+                break
+        if best_pv_nrot is not None and len(best_pv_nrot.group(2)) >= 8:
+            break
+    if best_pv_nrot:
+        pv  = best_pv_nrot.group(1).zfill(5)[:5]
+        num = best_pv_nrot.group(2).zfill(8)[:8]
         return OcrField(value=f"{pv}-{num}", confidence=0.92)
 
     # Pass 1 — joined XXXXX-XXXXXXXX token

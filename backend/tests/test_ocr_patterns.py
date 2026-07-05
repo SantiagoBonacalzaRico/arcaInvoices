@@ -1,5 +1,4 @@
 """Unit tests for OCR field extraction — no images needed."""
-import pytest
 from app.ocr.extractor import (
     _extract_cuit, _extract_date, _extract_invoice_number, _extract_total,
     _valid_cuit_digits, CONFIDENCE_THRESHOLD,
@@ -23,12 +22,6 @@ def test_cuit_plain():
     assert f.value == VALID_CUIT
     assert f.confidence >= CONFIDENCE_THRESHOLD
 
-@pytest.mark.xfail(
-    reason="Known OCR-tuning gap: dotted 'C.U.I.T.:' label currently scores 0.85, "
-           "not >=0.90. Tracked for the OCR work; xfail keeps CI green without "
-           "masking it.",
-    strict=False,
-)
 def test_cuit_labelled():
     f = _extract_cuit(f"C.U.I.T.: {VALID_CUIT}")
     assert f.value == VALID_CUIT
@@ -97,6 +90,22 @@ def test_invoice_label_guided():
     f = _extract_invoice_number(text)
     assert f.value is not None
     assert "00003" in f.value
+
+def test_invoice_pv_ndeg_layout():
+    # Fiscal-controller ticket: PV and number are separately labelled as
+    # "P.V. N° 00021" / "Nro. T. 00523097". The ticket-type code "Cód.083"
+    # must NOT be mistaken for the punto de venta.
+    text = "TIQUE (Cód.083)   P.V. N° 00021 Nro. T. 00523097   Fecha 01/07/2026"
+    f = _extract_invoice_number(text)
+    assert f.value == "00021-00523097"
+    assert f.confidence >= 0.9
+
+def test_invoice_pv_ndeg_ocr_misreads():
+    # Same layout with OCR misreads: 'P.V.' → 'P.Y.', 'N°' → 'N*'.
+    text = "TIQUE (Cód.083)   P.Y. N* 00021 Nro. T. 00523097   Fecha 01/07/2026"
+    f = _extract_invoice_number(text)
+    assert f.value == "00021-00523097"
+    assert f.confidence >= 0.9
 
 def test_invoice_not_found():
     f = _extract_invoice_number("sin numero de comprobante")

@@ -51,10 +51,17 @@ INVOICE_SPACED = re.compile(r"\b(\d{4,5})\s{1,3}(\d{8})\b")
 # Split layout used by Makro and other fiscal-controller tickets: the punto de
 # venta and the comprobante number are two separately-labelled fields, e.g.
 #   "P.V. Nro.:1776   Nro T. 00119564"  →  01776-00119564
-# Group 1 = punto de venta (under "P.V. Nro."), group 2 = comprobante ("Nro T.").
+#   "P.V. N° 00021 Nro. T. 00523097"    →  00021-00523097
+# Group 1 = punto de venta (under "P.V. Nro." / "P.V. N°"), group 2 = comprobante
+# ("Nro T.").  Tolerates common OCR misreads: the 'V' in "P.V." read as 'Y', and
+# the "N°" degree sign read as *, º, o or O (so "P.Y. N* 00021" still matches).
 INVOICE_PV_NROT = re.compile(
-    r"P\.?\s*V\.?\s*Nro\.?\s*[:.]?\s*(\d{1,5})"   # P.V. Nro.: 1776
-    r"\s*Nro\.?\s*T\.?\s*[:.]?\s*(\d{4,8})",      # Nro T. 00119564
+    r"P\.?\s*[VY]\.?\s*"                          # P.V.  (V may misread as Y)
+    # "Nro." / "N°" label; the degree sign is read inconsistently by OCR
+    # (°, º, *, ', o, …) so allow a short run of non-alphanumeric noise before
+    # the digits rather than enumerating every rendering.
+    r"(?:Nro|N)\.?[^\dA-Za-z\n]{0,4}(\d{1,5})"   # + punto de venta digits
+    r"[^\dA-Za-z\n]{0,4}Nro\.?\s*T\.?[^\dA-Za-z\n]{0,4}(\d{4,8})",  # Nro T. 00119564
     re.IGNORECASE,
 )
 
