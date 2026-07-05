@@ -120,6 +120,19 @@ def start_scheduler() -> None:
     logger.info("Scheduler started (daily multi-user tick at 09:00)")
 
 
+def shutdown_scheduler() -> None:
+    """
+    Stop the scheduler and drop the singleton so a subsequent start_scheduler()
+    builds a fresh instance bound to the live event loop. Reusing a shut-down
+    AsyncIOScheduler raises "Event loop is closed" (e.g. across test lifespans).
+    """
+    global _scheduler
+    if _scheduler is not None:
+        if _scheduler.running:
+            _scheduler.shutdown(wait=False)
+        _scheduler = None
+
+
 def update_schedule() -> None:
     """
     No-op kept for API compatibility. The daily tick reads each user's settings

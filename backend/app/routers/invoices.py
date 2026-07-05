@@ -172,6 +172,26 @@ def create_invoice(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # Reject duplicates: an invoice is identified by (CUIT, comprobante number)
+    # for a given user. The same physical invoice must not be loaded twice.
+    existing = (
+        db.query(Invoice)
+        .filter(
+            Invoice.user_id == user.id,
+            Invoice.cuit == payload.cuit,
+            Invoice.invoice_number == payload.invoice_number,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Esta factura ya fue cargada "
+                f"(CUIT {payload.cuit}, comprobante {payload.invoice_number})."
+            ),
+        )
+
     inv = Invoice(**payload.model_dump(), user_id=user.id)
     db.add(inv)
     db.commit()

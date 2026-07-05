@@ -29,11 +29,9 @@ async def lifespan(app: FastAPI):
     from .scheduler import start_scheduler
     start_scheduler()
     yield
-    # Shutdown scheduler
-    from .scheduler import get_scheduler
-    scheduler = get_scheduler()
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
+    # Shutdown scheduler (drops the singleton so a later restart gets a fresh one)
+    from .scheduler import shutdown_scheduler
+    shutdown_scheduler()
 
 
 app = FastAPI(

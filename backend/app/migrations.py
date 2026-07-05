@@ -75,6 +75,32 @@ def _add_user_id_and_backfill(conn, insp, table: str, owner_id: int, index_sql: 
     logger.info("Migration: added %s.user_id and backfilled to owner", table)
 
 
+def _ensure_invoice_dedup_index(conn, insp) -> None:
+    """
+    Add the (user_id, cuit, invoice_number) unique index that blocks duplicate
+    invoices. Best-effort: if a pre-existing DB already holds duplicate rows the
+    index creation fails — we log and skip rather than break startup, since the
+    app-level check in create_invoice still rejects new duplicates.
+    """
+    existing = {ix["name"] for ix in insp.get_indexes("invoices")}
+    if "uq_invoices_user_cuit_number" in existing:
+        return
+    # Use a savepoint so a failure (pre-existing duplicate rows) rolls back only
+    # this statement instead of poisoning the outer transaction on PostgreSQL.
+    try:
+        with conn.begin_nested():
+            conn.execute(text(
+                "CREATE UNIQUE INDEX uq_invoices_user_cuit_number "
+                "ON invoices (user_id, cuit, invoice_number)"
+            ))
+        logger.info("Migration: added unique index on invoices (user_id, cuit, invoice_number)")
+    except Exception as exc:  # noqa: BLE001 — pre-existing dupes shouldn't block boot
+        logger.warning(
+            "Migration: could not create invoice dedup index (likely existing "
+            "duplicate rows); skipping. App-level dedup still applies. (%s)", exc
+        )
+
+
 def _rebuild_cuit_registry(conn, owner_id: int) -> None:
     """SQLite in-place rebuild from (cuit PK) → (id PK, per-user unique)."""
     conn.execute(text(
@@ -129,6 +155,7 @@ def run(engine: Engine) -> None:
             conn, insp, "invoices", owner_id,
             "CREATE INDEX IF NOT EXISTS idx_invoices_user ON invoices (user_id)",
         )
+        _ensure_invoice_dedup_index(conn, insp)
         _add_user_id_and_backfill(
             conn, insp, "ocr_corrections", owner_id,
             "CREATE INDEX IF NOT EXISTS ix_ocr_corrections_user_id ON ocr_corrections (user_id)",

@@ -408,7 +408,14 @@ async function save() {
     })
     step.value = 'done'
   } catch (err) {
-    saveError.value = err.response?.data?.detail || err.message
+    if (err.response?.status === 409) {
+      // Duplicate invoice (same CUIT + comprobante already loaded)
+      saveError.value =
+        err.response?.data?.detail ||
+        'Esta factura ya fue cargada anteriormente.'
+    } else {
+      saveError.value = err.response?.data?.detail || err.message
+    }
   } finally {
     saving.value = false
   }

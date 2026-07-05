@@ -76,6 +76,12 @@ class Invoice(Base):
         Index("idx_invoices_category", "category"),
         Index("idx_invoices_status_date", "sync_status", "invoice_date"),
         Index("idx_invoices_user", "user_id"),
+        # An invoice is uniquely identified by its emisor (CUIT) + comprobante
+        # number, per user. Prevents the same invoice being captured twice.
+        UniqueConstraint(
+            "user_id", "cuit", "invoice_number",
+            name="uq_invoices_user_cuit_number",
+        ),
     )
 
 
