@@ -83,7 +83,11 @@ def _run_ocr(img: np.ndarray) -> str:
                transaction date+time (small text — needs upscaling).
     All results concatenated; field extractors scan the combined text.
     """
-    gray = _to_gray(img)
+    # Cap the working resolution once (≤ _OCR_MAX_SIDE). Everything below —
+    # including the 2×-upscaled header pass — derives from this, so a 12 MP phone
+    # photo never balloons into a multi-megapixel Tesseract job on a small box.
+    img = _resize_for_ocr(img)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h = gray.shape[0]
 
     full_text   = _tesseract(gray, "4")

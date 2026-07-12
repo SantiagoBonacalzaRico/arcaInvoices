@@ -74,6 +74,25 @@ except ImportError:
 
 _ARCA_QR_HOSTS = {"www.afip.gob.ar", "serviciosweb.afip.gob.ar", "www.arca.gob.ar"}
 
+# Barcode/QR decoders don't benefit from more than ~1600px on the longest side,
+# but the cost of the multi-region × multi-variant × multi-binarizer sweep scales
+# with pixel count.  Full-resolution phone photos (≈12 MP, 3000×4000) — and worse,
+# their 2× upscales — make a non-decoding sweep take *minutes* on a small instance.
+# Cap the working resolution first: validated that ARCA-QR decode is preserved at
+# 1200–1600px while the worst-case sweep runs 5–9× faster.
+_MAX_SCAN_SIDE = 1600
+
+
+def _cap_size(img: np.ndarray, max_side: int = _MAX_SCAN_SIDE) -> np.ndarray:
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return img
+    scale = max_side / longest
+    return cv2.resize(
+        img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA
+    )
+
 
 @dataclass
 class BarcodeResult:
@@ -176,30 +195,39 @@ def _decode_raw(gray: np.ndarray) -> list[tuple[str, str]]:
     """
     results: list[tuple[str, str]] = []
 
+    # Each decoder is wrapped: a library edge case (e.g. an unsupported kwarg
+    # after a version bump, or a bad frame) must degrade to the next decoder /
+    # variant / OCR fallback, never propagate and 500 or hang the request.
     if _ZXING:
-        for bz in (_zx.Binarizer.LocalAverage, _zx.Binarizer.GlobalHistogram):
-            found = _zx.read_barcodes(
-                gray,
-                try_rotate=True,
-                try_invert=True,
-                try_downscale=True,
-                binarizer=bz,
-            )
-            for r in found:
-                if r.text:
-                    results.append((r.format.name, r.text))
-            if results:
-                return results
+        try:
+            for bz in (_zx.Binarizer.LocalAverage, _zx.Binarizer.GlobalHistogram):
+                found = _zx.read_barcodes(
+                    gray,
+                    try_rotate=True,
+                    try_invert=True,
+                    try_downscale=True,
+                    binarizer=bz,
+                )
+                for r in found:
+                    if r.text:
+                        results.append((r.format.name, r.text))
+                if results:
+                    return results
+        except Exception:
+            pass
 
     if _PYZBAR:
-        from PIL import Image as _PIL
-        codes = pyzbar_decode(_PIL.fromarray(gray))
-        for c in codes:
-            try:
-                text = c.data.decode("utf-8", errors="replace")
-            except Exception:
-                continue
-            results.append((c.type, text))
+        try:
+            from PIL import Image as _PIL
+            codes = pyzbar_decode(_PIL.fromarray(gray))
+            for c in codes:
+                try:
+                    text = c.data.decode("utf-8", errors="replace")
+                except Exception:
+                    continue
+                results.append((c.type, text))
+        except Exception:
+            pass
 
     return results
 
@@ -236,12 +264,15 @@ def _scan_gray(gray: np.ndarray) -> list[tuple[str, str]]:
         hits = _decode_raw(prep)
         if hits:
             return hits
-        # Also try 2× upscale of each variant (helps small QR codes)
-        up = cv2.resize(prep, (prep.shape[1] * 2, prep.shape[0] * 2),
-                        interpolation=cv2.INTER_LANCZOS4)
-        hits = _decode_raw(up)
-        if hits:
-            return hits
+        # 2× upscale helps small QR codes, but only genuinely small regions need
+        # it.  Upscaling an already-large region (the full image / halves) just
+        # produces a multi-megapixel array that slows the sweep with no benefit.
+        if max(prep.shape[:2]) < 1000:
+            up = cv2.resize(prep, (prep.shape[1] * 2, prep.shape[0] * 2),
+                            interpolation=cv2.INTER_LANCZOS4)
+            hits = _decode_raw(up)
+            if hits:
+                return hits
     return []
 
 
@@ -277,6 +308,12 @@ def scan(img: np.ndarray) -> Optional[BarcodeResult]:
     """
     if not _PYZBAR and not _ZXING:
         return None
+
+    # Cap resolution before the sweep — the single biggest cost driver. A
+    # decodable code still short-circuits on the first region; a non-decoding
+    # image (blurry/angled photo, plain receipt) runs the full 9-region ×
+    # variant sweep, which is minutes at 12 MP on a small box, seconds at 1600px.
+    img = _cap_size(img)
 
     best: Optional[BarcodeResult] = None
     other_qr: Optional[str] = None

@@ -7,6 +7,12 @@ pydantic-settings==2.7.0
 pillow==11.1.0
 pytesseract==0.3.13
 opencv-python-headless==4.10.0.84
+# Pinned exactly: an unpinned floor let a Docker rebuild silently float this to a
+# new major (2.x → 3.0.0), which changed the read_barcodes() API and broke QR/
+# barcode scanning in prod. numpy is pinned for the same drift-safety reason
+# (it's the ABI base for opencv/zxing/pyzbar).
+numpy==2.4.6
+zxing-cpp==3.0.0
 imagehash==4.3.2
 cryptography==44.0.0
 zeep==4.3.1
@@ -16,7 +22,6 @@ aiosmtplib==3.0.2
 twilio>=9.5.0
 httpx==0.28.1
 pyzbar==0.1.9
-zxing-cpp>=2.2.0
 python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
 authlib==1.4.0
