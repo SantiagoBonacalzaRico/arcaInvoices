@@ -76,9 +76,13 @@
         <div v-if="editing !== inv.id" class="inv-view">
           <div class="inv-main">
             <span class="inv-number">{{ inv.invoice_number }}</span>
-            <button class="copy-btn" @click="copyPlain('invoice_number', inv.invoice_number)"
-                    title="Copiar número (solo dígitos)" aria-label="Copiar número">
-              <svg class="ico"><use href="#ico-copy" /></svg>
+            <button class="copy-btn" @click="copyInvoicePart(inv.invoice_number, 0)"
+                    title="Copiar punto de venta (solo dígitos)" aria-label="Copiar punto de venta">
+              <svg class="ico"><use href="#ico-copy" /></svg><span class="copy-part-tag">PV</span>
+            </button>
+            <button class="copy-btn" @click="copyInvoicePart(inv.invoice_number, 1)"
+                    title="Copiar nro. de comprobante (solo dígitos)" aria-label="Copiar nro. de comprobante">
+              <svg class="ico"><use href="#ico-copy" /></svg><span class="copy-part-tag">N°</span>
             </button>
             <span :class="['badge', `badge-${inv.sync_status}`]">{{ inv.sync_status }}</span>
           </div>
@@ -294,16 +298,28 @@ function plainValue(field, value) {
   }
 }
 
-async function copyPlain(field, value) {
-  const text = plainValue(field, value)
+async function copyText(text, label) {
   try {
     await navigator.clipboard.writeText(text)
-    copiedMsg.value = COPY_LABELS[field] || 'Copiado'
+    copiedMsg.value = label
     if (copyTimer) clearTimeout(copyTimer)
     copyTimer = setTimeout(() => { copiedMsg.value = '' }, 1600)
   } catch {
     // Clipboard API unavailable (e.g. insecure context) — silently ignore
   }
+}
+
+async function copyPlain(field, value) {
+  await copyText(plainValue(field, value), COPY_LABELS[field] || 'Copiado')
+}
+
+// Copy one half of the invoice number, digits only (dash excluded).
+// For "00206-00016716": part 0 → "00206" (punto de venta),
+//                       part 1 → "00016716" (nro. de comprobante).
+async function copyInvoicePart(invoiceNumber, part) {
+  const segment = String(invoiceNumber || '').split('-')[part] || ''
+  const label = part === 0 ? 'Punto de venta copiado' : 'Nro. comprobante copiado'
+  await copyText(segment.replace(/\D/g, ''), label)
 }
 
 async function load() {
@@ -384,6 +400,7 @@ onMounted(load)
 }
 .copy-btn:hover { opacity: 1; background: #eef1f4; color: #1f6feb; }
 .copy-btn .ico { width: 15px; height: 15px; display: block; }
+.copy-part-tag { font-size: .6rem; font-weight: 700; margin-left: .12rem; line-height: 1; }
 
 /* Ephemeral copy confirmation toast */
 .copy-toast {
