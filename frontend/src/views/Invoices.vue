@@ -47,6 +47,7 @@
         <label class="sort-label">Ordenar:</label>
         <select v-model="sortField">
           <option value="invoice_date">Fecha</option>
+          <option value="total_amount">Monto</option>
           <option value="cuit">CUIT</option>
           <option value="razon_social">Razón social</option>
         </select>
@@ -219,10 +220,27 @@ function filterRows(rows, { skipCuit = false, skipRazon = false } = {}) {
   })
 }
 
+// Fields compared as numbers rather than strings (so 1000 sorts after 9).
+const NUMERIC_SORT_FIELDS = new Set(['total_amount'])
+
 const visibleInvoices = computed(() => {
   const rows = filterRows(invoices.value)
   const dir = sortDir.value === 'asc' ? 1 : -1
   const field = sortField.value
+
+  if (NUMERIC_SORT_FIELDS.has(field)) {
+    return [...rows].sort((a, b) => {
+      const av = Number(a[field])
+      const bv = Number(b[field])
+      const aEmpty = !Number.isFinite(av)
+      const bEmpty = !Number.isFinite(bv)
+      if (aEmpty && bEmpty) return 0
+      if (aEmpty) return 1      // empty values always last
+      if (bEmpty) return -1
+      return (av - bv) * dir
+    })
+  }
+
   return [...rows].sort((a, b) => {
     const av = (a[field] ?? '').toString().toLowerCase()
     const bv = (b[field] ?? '').toString().toLowerCase()
