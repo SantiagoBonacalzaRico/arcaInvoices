@@ -54,26 +54,5 @@ resource "aws_security_group" "web" {
   tags = { Name = "${var.project}-web" }
 }
 
-# Database tier: Postgres reachable ONLY from the web security group.
-resource "aws_security_group" "db" {
-  name        = "${var.project}-db"
-  description = "arcaInvoices db: 5432 from web SG only."
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    description     = "PostgreSQL from web tier"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.web.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.project}-db" }
-}
+# Database tier security group removed 2026-09-22 — the app runs on SQLite; there
+# is no RDS to protect. (History in git; see rds.tf / secrets.tf.)
