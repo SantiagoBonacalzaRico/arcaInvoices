@@ -99,6 +99,15 @@ resource "aws_instance" "app" {
   user_data_replace_on_change = false
 
   tags = { Name = "${var.project}-app" }
+
+  # The AMI data source tracks the latest Amazon Linux 2023 image, which changes
+  # over time. Without this, a routine `terraform apply` would destroy and
+  # recreate the running instance (wiping the SQLite DB on its EBS volume) just
+  # to adopt a newer AMI. Pin to the current AMI; re-image deliberately, not by
+  # accident.
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "app" {

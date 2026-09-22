@@ -28,9 +28,10 @@ resource "random_password" "admin" {
 # ── Managed parameters (Terraform owns the value) ─────────────────────────────
 
 resource "aws_ssm_parameter" "db_url" {
-  name  = "${local.ssm_prefix}/DB_URL"
-  type  = "SecureString"
-  value = "postgresql+psycopg2://${var.db_username}:${random_password.db.result}@${aws_db_instance.this.address}:5432/${var.db_name}"
+  name = "${local.ssm_prefix}/DB_URL"
+  type = "SecureString"
+  # SQLite on the EC2 EBS volume (mounted at /app/data) since RDS was retired.
+  value = "sqlite:////app/data/app.db"
 }
 
 resource "aws_ssm_parameter" "secret_key" {
@@ -61,6 +62,12 @@ resource "aws_ssm_parameter" "admin_password" {
   name  = "${local.ssm_prefix}/ADMIN_PASSWORD"
   type  = "SecureString"
   value = random_password.admin.result
+
+  # Only used to seed the owner on first boot; the owner now exists, so this
+  # value no longer affects login. Stop managing it to avoid perpetual drift.
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 resource "aws_ssm_parameter" "cookie_secure" {
@@ -77,14 +84,14 @@ resource "aws_ssm_parameter" "cookie_secure" {
 
 resource "aws_ssm_parameter" "placeholders" {
   for_each = {
-    APP_BASE_URL         = "https://CHANGE_ME"
-    OAUTH_REDIRECT_BASE  = "https://CHANGE_ME"
-    CORS_ORIGINS         = "[\"https://CHANGE_ME\"]"
-    GOOGLE_CLIENT_ID     = "REPLACE_ME"
-    SYSTEM_SMTP_HOST     = "smtp.gmail.com"
-    SYSTEM_SMTP_PORT     = "587"
-    SYSTEM_SMTP_USER     = "REPLACE_ME"
-    SYSTEM_SMTP_FROM     = "REPLACE_ME"
+    APP_BASE_URL        = "https://CHANGE_ME"
+    OAUTH_REDIRECT_BASE = "https://CHANGE_ME"
+    CORS_ORIGINS        = "[\"https://CHANGE_ME\"]"
+    GOOGLE_CLIENT_ID    = "REPLACE_ME"
+    SYSTEM_SMTP_HOST    = "smtp.gmail.com"
+    SYSTEM_SMTP_PORT    = "587"
+    SYSTEM_SMTP_USER    = "REPLACE_ME"
+    SYSTEM_SMTP_FROM    = "REPLACE_ME"
   }
 
   name  = "${local.ssm_prefix}/${each.key}"

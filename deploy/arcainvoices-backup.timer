@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly arcaInvoices DB backup to S3
+
+[Timer]
+# 07:30 UTC = 04:30 America/Argentina/Buenos_Aires (low-traffic window).
+OnCalendar=*-*-* 07:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

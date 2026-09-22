@@ -13,11 +13,6 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
-output "rds_endpoint" {
-  description = "RDS Postgres endpoint (private; reachable only from the instance)."
-  value       = aws_db_instance.this.address
-}
-
 output "github_actions_role_arn" {
   description = "Role ARN GitHub Actions assumes via OIDC (set as a repo secret in Phase 6)."
   value       = aws_iam_role.github_actions.arn

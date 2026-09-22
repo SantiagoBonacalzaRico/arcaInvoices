@@ -69,7 +69,17 @@ variable "admin_username" {
 }
 
 variable "monthly_budget_usd" {
-  description = "Monthly cost budget that triggers the alert email."
+  description = "Monthly cost budget: alerts at 80%/100% and auto-stops EC2 at 100%."
   type        = number
-  default     = 5
+  default     = 15
+}
+
+variable "app_instance_id" {
+  description = <<-EOT
+    EC2 instance the budget auto-stop targets. Pinned as a literal (not
+    aws_instance.app.id) so the guardrail can be applied without coupling to the
+    instance resource, which currently has pending AMI-replacement drift.
+  EOT
+  type        = string
+  default     = "i-0d6efa55a2280a51d"
 }
