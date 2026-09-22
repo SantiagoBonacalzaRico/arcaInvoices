@@ -181,7 +181,8 @@ body {
   font-weight: 700;
   text-transform: uppercase;
 }
-.badge-pending  { background: #fff3e0; color: #e65100; }
-.badge-synced   { background: #e8f5e9; color: #2e7d32; }
-.badge-error    { background: #fce4ec; color: #b71c1c; }
+.badge-pending    { background: #fff3e0; color: #e65100; }
+.badge-synced     { background: #e8f5e9; color: #2e7d32; }
+.badge-error      { background: #fce4ec; color: #b71c1c; }
+.badge-finalizada { background: #e8eaf6; color: #303f9f; }
 </style>

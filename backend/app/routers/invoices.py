@@ -238,8 +238,9 @@ def set_sync_status(
     user: User = Depends(get_current_user),
 ):
     """
-    Manually flip an invoice's sync status (no AFIP call).
-    'synced' stamps synced_at = now; 'pending' clears it.
+    Manually set an invoice's status (no AFIP call).
+    'synced' stamps synced_at = now; 'pending'/'finalizada' clear it.
+    'finalizada' marks the invoice closed without loading it into SiRADIG.
     """
     inv = _get_invoice_or_404(invoice_id, db, user.id)
     inv.sync_status = payload.sync_status

@@ -57,6 +57,35 @@ def test_same_number_different_cuit_is_allowed(base):
                                       "invoice_number": "0007-00000001"})
     assert a.status_code == 201, a.text
 
+
+def test_mark_finalizada_status(base):
+    c = _admin_client(base)
+    created = c.post("/api/invoices", json={**INVOICE, "cuit": "27-87654321-4",
+                                            "invoice_number": "0009-00000042"})
+    assert created.status_code == 201, created.text
+    inv_id = created.json()["id"]
+
+    # Mark finalizada — accepted, not counted as synced, no synced_at stamp.
+    r = c.patch(f"/api/invoices/{inv_id}/sync-status", json={"sync_status": "finalizada"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sync_status"] == "finalizada"
+    assert body["synced_at"] is None
+
+    # Filterable by the new status.
+    rows = c.get("/api/invoices", params={"status": "finalizada"}).json()
+    assert any(i["id"] == inv_id for i in rows)
+    assert all(i["sync_status"] == "finalizada" for i in rows)
+
+
+def test_invalid_status_rejected(base):
+    c = _admin_client(base)
+    created = c.post("/api/invoices", json={**INVOICE, "cuit": "20-12345678-6",
+                                            "invoice_number": "0009-00000043"})
+    inv_id = created.json()["id"]
+    r = c.patch(f"/api/invoices/{inv_id}/sync-status", json={"sync_status": "bogus"})
+    assert r.status_code == 422, r.text
+
     # Same comprobante number but a different emisor (CUIT) is a distinct
     # invoice and must be accepted.
     b = c.post("/api/invoices", json={**INVOICE, "cuit": "27-87654321-4",

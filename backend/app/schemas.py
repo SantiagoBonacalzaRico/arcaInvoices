@@ -91,7 +91,9 @@ class InvoiceOut(InvoiceBase):
 
 
 class SyncStatusUpdate(BaseModel):
-    sync_status: Literal["synced", "pending"]
+    # 'finalizada' = user-closed without loading into SiRADIG; it is NOT counted
+    # as synced ("Cargadas en SiRADIG") and is skipped by the SiRADIG loader.
+    sync_status: Literal["synced", "pending", "finalizada"]
 
 
 # ── OCR ───────────────────────────────────────────────────────────────────────

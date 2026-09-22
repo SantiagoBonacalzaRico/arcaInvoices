@@ -16,6 +16,10 @@
           <span class="total-label">{{ isFiltered ? 'Total filtrado' : 'Total' }} ({{ visibleInvoices.length }})</span>
           <span class="total-amount">${{ filteredTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 }) }}</span>
         </div>
+        <div class="total-summary">
+          <span class="total-label">Total no cargado ({{ notLoadedCount }})</span>
+          <span class="total-amount total-amount-warn">${{ notLoadedTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 }) }}</span>
+        </div>
         <router-link to="/capture" class="btn btn-primary">+ Nueva</router-link>
       </div>
     </div>
@@ -31,6 +35,7 @@
         <option value="">Todos los estados</option>
         <option value="pending">Pendiente</option>
         <option value="synced">Sincronizado</option>
+        <option value="finalizada">Finalizada</option>
         <option value="error">Error</option>
       </select>
       <select v-model="filterRazon" class="facet-select">
@@ -126,6 +131,9 @@
               @click="toggleSync(inv)"
             >
               {{ inv.sync_status === 'synced' ? 'Marcar pendiente' : 'Marcar sincronizada' }}
+            </button>
+            <button class="btn btn-outline btn-sm" @click="toggleFinalizada(inv)">
+              {{ inv.sync_status === 'finalizada' ? 'Marcar pendiente' : 'Marcar finalizada' }}
             </button>
             <button class="btn btn-danger btn-sm" @click="remove(inv.id)">Eliminar</button>
           </div>
@@ -285,6 +293,18 @@ const filteredTotal = computed(() =>
   visibleInvoices.value.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0)
 )
 
+// "No cargado" = still needs loading into SiRADIG: everything not yet synced,
+// EXCLUDING invoices the user marked 'finalizada' (closed without loading).
+const notLoadedInvoices = computed(() =>
+  visibleInvoices.value.filter(
+    (inv) => inv.sync_status !== 'synced' && inv.sync_status !== 'finalizada'
+  )
+)
+const notLoadedCount = computed(() => notLoadedInvoices.value.length)
+const notLoadedTotal = computed(() =>
+  notLoadedInvoices.value.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0)
+)
+
 function plainValue(field, value) {
   if (value == null) return ''
   switch (field) {
@@ -350,11 +370,18 @@ async function saveEdit(id) {
   await load()
 }
 
-async function toggleSync(inv) {
-  const next = inv.sync_status === 'synced' ? 'pending' : 'synced'
-  const res = await setInvoiceSyncStatus(inv.id, next)
+async function setStatus(inv, status) {
+  const res = await setInvoiceSyncStatus(inv.id, status)
   // Patch in place so the list order/scroll doesn't jump
   Object.assign(inv, res.data)
+}
+
+async function toggleSync(inv) {
+  await setStatus(inv, inv.sync_status === 'synced' ? 'pending' : 'synced')
+}
+
+async function toggleFinalizada(inv) {
+  await setStatus(inv, inv.sync_status === 'finalizada' ? 'pending' : 'finalizada')
 }
 
 async function remove(id) {
@@ -373,6 +400,7 @@ onMounted(load)
 .total-summary { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
 .total-label { font-size: .72rem; color: #888; text-transform: uppercase; letter-spacing: .02em; }
 .total-amount { font-size: 1.25rem; font-weight: 700; color: #1a7f37; }
+.total-amount-warn { color: #e65100; }
 .filters { padding: .75rem 1rem; display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; }
 .filters select { padding: .45rem .7rem; border-radius: 8px; border: 1.5px solid #d0d7de; font-size: .9rem; }
 .facet-select { max-width: 240px; }
