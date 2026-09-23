@@ -83,3 +83,9 @@ variable "app_instance_id" {
   type        = string
   default     = "i-0d6efa55a2280a51d"
 }
+
+variable "domain" {
+  description = "Custom apex domain for the app. www.<domain> is the primary URL."
+  type        = string
+  default     = "easyinvoices.com.ar"
+}

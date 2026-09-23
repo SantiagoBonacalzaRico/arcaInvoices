@@ -1,6 +1,18 @@
-# SITE_ADDRESS is injected from the environment (set in docker-compose.prod.yml
-# from .env). Caddy automatically obtains + renews a Let's Encrypt certificate
-# for it and reverse-proxies to the app container.
+# Caddy auto-obtains + renews a free Let's Encrypt cert for every site address
+# below and reverse-proxies to the app container.
+#
+# SITE_ADDRESS (from .env, rendered from SSM) is the primary domain:
+# www.easyinvoices.com.ar. The sslip.io address is kept live because the
+# installed native Android app was built with that API base. The apex
+# redirects to www.
 {$SITE_ADDRESS} {
 	reverse_proxy app:8000
+}
+
+56.126.116.221.sslip.io {
+	reverse_proxy app:8000
+}
+
+easyinvoices.com.ar {
+	redir https://www.easyinvoices.com.ar{uri} permanent
 }
