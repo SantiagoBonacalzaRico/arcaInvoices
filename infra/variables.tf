@@ -28,9 +28,9 @@ variable "alert_email" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (free tier in sa-east-1 = t3.micro)."
+  description = "EC2 instance type. Graviton t4g.micro (arm64): same 1GB RAM as t3.micro, ~30% cheaper in sa-east-1."
   type        = string
-  default     = "t3.micro"
+  default     = "t4g.micro"
 }
 
 variable "db_instance_class" {
@@ -76,12 +76,12 @@ variable "monthly_budget_usd" {
 
 variable "app_instance_id" {
   description = <<-EOT
-    EC2 instance the budget auto-stop targets. Pinned as a literal (not
-    aws_instance.app.id) so the guardrail can be applied without coupling to the
-    instance resource, which currently has pending AMI-replacement drift.
+    EC2 instance the budget auto-stop targets. Pinned as a literal so the
+    guardrail doesn't couple to the instance resource. Update this whenever the
+    instance is replaced (e.g. the 2026-10 Graviton migration).
   EOT
   type        = string
-  default     = "i-0d6efa55a2280a51d"
+  default     = "i-0d84e2d9d02c55d17"
 }
 
 variable "domain" {

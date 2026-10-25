@@ -73,15 +73,17 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.web.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2.name
 
-  # Free-tier EBS: 30 GB gp3 included.
+  # 15 GB gp3 — ample for the OS + app image + SQLite DB + invoice images
+  # (~200 MB), and cheaper than the old 30 GB.
   root_block_device {
-    volume_size = 30
+    volume_size = 15
     volume_type = "gp3"
     encrypted   = true
   }
 
-  # Install Docker + the compose plugin and prep the app directory. The actual
-  # compose stack + Caddy + deploy script land in Phase 4.
+  # Install Docker + the compose plugin and prep the app directory.
+  # ARCH is resolved at boot (uname -m → x86_64 or aarch64) so this works on
+  # both x86 and Graviton instances.
   user_data = <<-EOF
     #!/bin/bash
     set -euo pipefail
@@ -90,7 +92,8 @@ resource "aws_instance" "app" {
     systemctl enable --now docker
     usermod -aG docker ec2-user
     mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+    ARCH=$(uname -m)
+    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$${ARCH}" \
       -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     mkdir -p /opt/${var.project}/data
@@ -100,11 +103,10 @@ resource "aws_instance" "app" {
 
   tags = { Name = "${var.project}-app" }
 
-  # The AMI data source tracks the latest Amazon Linux 2023 image, which changes
-  # over time. Without this, a routine `terraform apply` would destroy and
-  # recreate the running instance (wiping the SQLite DB on its EBS volume) just
-  # to adopt a newer AMI. Pin to the current AMI; re-image deliberately, not by
-  # accident.
+  # The AMI data source tracks the latest AL2023 arm64 image, which changes over
+  # time. Without this, a routine apply would destroy/recreate the running
+  # instance (wiping the SQLite volume) just to adopt a newer AMI. Re-image
+  # deliberately (remove this temporarily), not by accident.
   lifecycle {
     ignore_changes = [ami]
   }

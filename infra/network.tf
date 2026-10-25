@@ -15,7 +15,7 @@ data "aws_subnets" "default" {
 
 # Latest Amazon Linux 2023 AMI (x86_64) via the public SSM parameter.
 data "aws_ssm_parameter" "al2023_ami" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 }
 
 # ── Security groups ───────────────────────────────────────────────────────────
