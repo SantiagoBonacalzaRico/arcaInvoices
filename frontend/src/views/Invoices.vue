@@ -66,6 +66,24 @@
       </div>
     </div>
 
+    <div class="bulk-bar" v-if="!loading && invoices.length">
+      <button
+        class="btn btn-primary btn-sm"
+        :disabled="!syncableCount || bulkBusy"
+        @click="syncAll"
+      >
+        {{ bulkBusy ? 'Procesando…' : `✓ Sincronizar todas${syncableCount ? ` (${syncableCount})` : ''}` }}
+      </button>
+      <button
+        class="btn btn-outline btn-sm"
+        v-if="lastSync"
+        :disabled="bulkBusy"
+        @click="undoSyncAll"
+      >
+        ↩ Deshacer sincronización
+      </button>
+    </div>
+
     <div v-if="loading" class="center muted">Cargando…</div>
 
     <div v-else-if="invoices.length === 0" class="card center muted">
@@ -196,6 +214,12 @@ const sortDir   = ref('desc')
 const copiedMsg = ref('')
 let copyTimer = null
 
+// Bulk sync-all + undo
+const bulkBusy = ref(false)
+// After a bulk sync: the ids that were flipped pending→synced, so "Deshacer"
+// can revert exactly those. Cleared once undone.
+const lastSync = ref(null)
+
 // Confirmation text per field (Spanish gender agreement)
 const COPY_LABELS = {
   cuit:           'CUIT copiado',
@@ -305,6 +329,13 @@ const notLoadedTotal = computed(() =>
   notLoadedInvoices.value.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0)
 )
 
+// "Sincronizar todas" targets the visible invoices still 'pending'. Restricting
+// to pending (not 'error') keeps undo clean — every target reverts to 'pending'.
+const syncableInvoices = computed(() =>
+  visibleInvoices.value.filter((inv) => inv.sync_status === 'pending')
+)
+const syncableCount = computed(() => syncableInvoices.value.length)
+
 function plainValue(field, value) {
   if (value == null) return ''
   switch (field) {
@@ -318,12 +349,17 @@ function plainValue(field, value) {
   }
 }
 
+// Ephemeral confirmation toast (reused by copy + bulk actions).
+function flashToast(msg) {
+  copiedMsg.value = msg
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copiedMsg.value = '' }, 1800)
+}
+
 async function copyText(text, label) {
   try {
     await navigator.clipboard.writeText(text)
-    copiedMsg.value = label
-    if (copyTimer) clearTimeout(copyTimer)
-    copyTimer = setTimeout(() => { copiedMsg.value = '' }, 1600)
+    flashToast(label)
   } catch {
     // Clipboard API unavailable (e.g. insecure context) — silently ignore
   }
@@ -384,6 +420,47 @@ async function toggleFinalizada(inv) {
   await setStatus(inv, inv.sync_status === 'finalizada' ? 'pending' : 'finalizada')
 }
 
+// Mark every visible 'pending' invoice as synced in one action. Records the
+// affected ids so it can be undone.
+async function syncAll() {
+  const targets = syncableInvoices.value
+  if (!targets.length || bulkBusy.value) return
+  if (!confirm(`¿Marcar ${targets.length} factura(s) como sincronizadas?`)) return
+  bulkBusy.value = true
+  try {
+    await Promise.all(targets.map((inv) => setStatus(inv, 'synced')))
+    lastSync.value = { ids: targets.map((i) => i.id) }
+    flashToast(`${targets.length} factura(s) sincronizada(s)`)
+  } catch {
+    flashToast('Error al sincronizar — recargando')
+    await load() // some may have succeeded; re-sync from the server
+  } finally {
+    bulkBusy.value = false
+  }
+}
+
+// Revert the last "Sincronizar todas": set exactly those invoices back to pending.
+async function undoSyncAll() {
+  if (!lastSync.value || bulkBusy.value) return
+  const { ids } = lastSync.value
+  bulkBusy.value = true
+  try {
+    await Promise.all(
+      ids
+        .map((id) => invoices.value.find((i) => i.id === id))
+        .filter(Boolean)
+        .map((inv) => setStatus(inv, 'pending')),
+    )
+    flashToast(`${ids.length} sincronización(es) deshecha(s)`)
+    lastSync.value = null
+  } catch {
+    flashToast('Error al deshacer — recargando')
+    await load()
+  } finally {
+    bulkBusy.value = false
+  }
+}
+
 async function remove(id) {
   if (!confirm('¿Eliminar esta factura?')) return
   await deleteInvoice(id)
@@ -407,6 +484,7 @@ onMounted(load)
 .search-box { flex: 1 1 240px; padding: .45rem .7rem; border-radius: 8px; border: 1.5px solid #d0d7de; font-size: .9rem; }
 .sort-control { display: flex; align-items: center; gap: .4rem; }
 .sort-label { font-size: .85rem; color: #555; }
+.bulk-bar { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .sort-dir { padding: .35rem .6rem; }
 .invoice-row { margin-bottom: .75rem; }
 .inv-main { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
